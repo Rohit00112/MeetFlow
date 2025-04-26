@@ -20,6 +20,13 @@ model User {
   phone         String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+
+  // Relations
+  hostedMeetings Meeting[]  @relation("MeetingHost")
+  attendances   Attendee[]
+
+  @@index([email])
+  @@index([createdAt])
 }
 
 model PasswordReset {
@@ -28,4 +35,54 @@ model PasswordReset {
   token         String    @unique
   expiresAt     DateTime
   createdAt     DateTime  @default(now())
+
+  @@index([email])
+  @@index([token])
+  @@index([expiresAt])
+}
+
+enum AttendeeStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  TENTATIVE
+}
+
+model Meeting {
+  id            String      @id @default(uuid())
+  title         String
+  description   String?     @db.Text
+  startTime     DateTime
+  endTime       DateTime
+  meetingLink   String      @unique
+  passcode      String?
+  isRecurring   Boolean     @default(false)
+  recurrenceRule String?
+  createdBy     String
+  host          User        @relation("MeetingHost", fields: [createdBy], references: [id], onDelete: Cascade)
+  attendees     Attendee[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@index([createdBy])
+  @@index([startTime])
+  @@index([meetingLink])
+}
+
+model Attendee {
+  id            String    @id @default(uuid())
+  meetingId     String
+  userId        String?
+  email         String
+  name          String?
+  status        AttendeeStatus @default(PENDING)
+  meeting       Meeting   @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user          User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([meetingId, email])
+  @@index([userId])
+  @@index([meetingId])
+  @@index([status])
 }
