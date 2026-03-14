@@ -1,0 +1,130 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["pnpm", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://meetflow:meetflow@postgres:5432/meetflow?schema=public}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:-secret}
+      LIVEKIT_URL: ${LIVEKIT_URL:-ws://livekit:7880}
+      NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-ws://localhost:7880}
+      TRANSCRIPTION_URL: ${TRANSCRIPTION_URL:-http://transcription:8000}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      livekit:
+        condition: service_started
+      transcription:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    ports:
+      - "3000:3000"
+    volumes:
+      - .:/app
+      - pnpm_store:/pnpm/store
+      - web_node_modules:/app/node_modules
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-meetflow}
+      POSTGRES_USER: ${POSTGRES_USER:-meetflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-meetflow}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-meetflow} -d ${POSTGRES_DB:-meetflow}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  livekit:
+    image: livekit/livekit-server:latest
+    command: ["--config", "/etc/livekit/livekit.yaml"]
+    depends_on:
+      redis:
+        condition: service_started
+    ports:
+      - "7880:7880"
+      - "7881:7881"
+      - "50000-50100:50000-50100/udp"
+    volumes:
+      - ./docker/livekit.yaml:/etc/livekit/livekit.yaml:ro
+
+  coturn:
+    image: coturn/coturn:latest
+    command: ["-c", "/etc/coturn/turnserver.conf", "--no-cli"]
+    ports:
+      - "3478:3478/tcp"
+      - "3478:3478/udp"
+      - "5349:5349/tcp"
+      - "5349:5349/udp"
+    volumes:
+      - ./docker/coturn/turnserver.conf:/etc/coturn/turnserver.conf:ro
+
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin123}
+      MINIO_BUCKET: ${MINIO_BUCKET:-meetflow-recordings}
+    entrypoint: ["/bin/sh", "/init-bucket.sh"]
+    volumes:
+      - ./docker/minio/init-bucket.sh:/init-bucket.sh:ro
+
+  egress:
+    image: livekit/egress:latest
+    command: ["--config", "/etc/livekit/egress.yaml"]
+    depends_on:
+      redis:
+        condition: service_started
+      livekit:
+        condition: service_started
+      minio-init:
+        condition: service_completed_successfully
+    volumes:
+      - ./docker/egress.yaml:/etc/livekit/egress.yaml:ro
+
+  transcription:
+    build:
+      context: .
+      dockerfile: docker/transcription/Dockerfile
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+  pnpm_store:
+  web_node_modules:
