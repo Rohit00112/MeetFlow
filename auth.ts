@@ -65,20 +65,30 @@ if (process.env.AUTH_GOOGLE_ID && process.env.AUTH_GOOGLE_SECRET) {
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   session: {
-    strategy: "database",
+    strategy: "jwt",
   },
   pages: {
     signIn: "/auth/login",
   },
   providers,
   callbacks: {
-    session({ session, user }) {
+    jwt({ token, user }) {
+      if (user) {
+        token.id = user.id;
+        token.avatar = user.avatar ?? null;
+        token.bio = user.bio ?? null;
+        token.phone = user.phone ?? null;
+      }
+
+      return token;
+    },
+    session({ session, token }) {
       if (session.user) {
-        session.user.id = user.id;
-        session.user.avatar = user.avatar ?? null;
-        session.user.bio = user.bio ?? null;
-        session.user.phone = user.phone ?? null;
-        session.user.image = user.avatar ?? session.user.image ?? null;
+        session.user.id = typeof token.id === "string" ? token.id : "";
+        session.user.avatar = typeof token.avatar === "string" ? token.avatar : null;
+        session.user.bio = typeof token.bio === "string" ? token.bio : null;
+        session.user.phone = typeof token.phone === "string" ? token.phone : null;
+        session.user.image = typeof token.avatar === "string" ? token.avatar : session.user.image ?? null;
       }
 
       return session;

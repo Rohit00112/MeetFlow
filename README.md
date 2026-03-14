@@ -17,10 +17,16 @@ pnpm build
 Start the development server:
 
 ```bash
+cp .env.example .env
+docker compose up -d postgres
+pnpm prisma migrate deploy
 pnpm dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+`DATABASE_URL` in `.env` is for running the Next.js app on your host machine.
+`DOCKER_DATABASE_URL` is used only by the `web` container inside Docker Compose.
 
 ## Docker Stack
 
