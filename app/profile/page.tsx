@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
-import { useAppSelector, useAppDispatch } from "@/redux/hooks";
+import { useAppDispatch } from "@/redux/hooks";
 import { updateProfile as updateProfileAction } from "@/redux/slices/authSlice";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
@@ -28,7 +28,7 @@ const getInitials = (name: string) => {
 const compressImage = async (file: File): Promise<File> => {
   return new Promise((resolve, reject) => {
     // Create a new image object
-    const img = new Image();
+    const img = new window.Image();
     img.src = URL.createObjectURL(file);
 
     img.onload = () => {
@@ -135,7 +135,7 @@ export default function ProfilePage() {
   const dispatch = useAppDispatch();
   const router = useRouter();
   // Use custom auth hook for authentication management
-  const { user, loading, error } = useAuth();
+  const { user, loading } = useAuth();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [bio, setBio] = useState("");
@@ -201,7 +201,7 @@ export default function ProfilePage() {
       }
 
       // Create a new image to check dimensions
-      const img = new Image();
+      const img = new window.Image();
       img.src = URL.createObjectURL(file);
 
       img.onload = () => {
@@ -447,7 +447,7 @@ export default function ProfilePage() {
               </div>
               {bio && !isEditing && (
                 <div className="mt-4 max-w-md mx-auto">
-                  <p className="text-gray-600 text-sm italic">"{bio}"</p>
+                  <p className="text-gray-600 text-sm italic">&ldquo;{bio}&rdquo;</p>
                 </div>
               )}
               <div className="mt-4 flex justify-center space-x-3">

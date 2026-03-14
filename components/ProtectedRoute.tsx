@@ -9,7 +9,7 @@ export default function ProtectedRoute({
 }: {
   children: React.ReactNode;
 }) {
-  const { user, loading } = useAppSelector((state: any) => state.auth);
+  const { user, loading } = useAppSelector((state) => state.auth);
   const router = useRouter();
   const pathname = usePathname();
 

@@ -6,7 +6,6 @@ import { forgotPassword as forgotPasswordAction } from "@/redux/slices/authSlice
 import Link from "next/link";
 import Image from "next/image";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import GoogleLogo from "@/public/google-logo.svg";
 import toast from "react-hot-toast";
 import { forgotPasswordSchema } from "@/lib/validations/auth";
 import { z } from "zod";
@@ -15,13 +14,13 @@ export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state: any) => state.auth);
+  const { loading, error } = useAppSelector((state) => state.auth);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       // Validate email using Zod
-      const validatedData = forgotPasswordSchema.parse({ email });
+      forgotPasswordSchema.parse({ email });
 
       // Dispatch forgot password action
       const resultAction = await dispatch(forgotPasswordAction({ email }));
@@ -68,7 +67,7 @@ export default function ForgotPasswordPage() {
             Reset your password
           </h1>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Enter your email address and we'll send you a link to reset your password
+            Enter your email address and we&apos;ll send you a link to reset your password
           </p>
         </div>
 

@@ -35,7 +35,7 @@ const NavIcon = ({ icon, size = 24 }: IconProps) => (
 );
 
 const Navbar = () => {
-  const { user, loading } = useAppSelector((state: any) => state.auth);
+  const { user, loading } = useAppSelector((state) => state.auth);
   const dispatch = useAppDispatch();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);

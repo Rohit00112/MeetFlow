@@ -1,18 +1,16 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { apiRequest, authenticatedRequest } from '@/lib/api';
-import { setToken, removeToken, clearAuthData } from '@/lib/tokenManager';
-
-// Define User type
-interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatar?: string;
-}
+import { setToken, clearAuthData } from '@/lib/tokenManager';
+import type {
+  AuthResponse,
+  AuthSessionResponse,
+  AuthUser,
+  MessageResponse,
+} from '@/lib/types/auth';
 
 // Define Auth State
-interface AuthState {
-  user: User | null;
+export interface AuthState {
+  user: AuthUser | null;
   token: string | null;
   loading: boolean;
   error: string | null;
@@ -34,7 +32,7 @@ export const login = createAsyncThunk(
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
       // Call the backend login endpoint
-      const data = await apiRequest('/auth/login', {
+      const data = await apiRequest<AuthResponse>('/auth/login', {
         method: 'POST',
         body: { email, password },
       });
@@ -71,7 +69,7 @@ export const register = createAsyncThunk(
       });
 
       // Call the backend register endpoint
-      const data = await apiRequest('/auth/register', {
+      const data = await apiRequest<AuthResponse>('/auth/register', {
         method: 'POST',
         body: { name, email, password, avatar: profileImage },
       });
@@ -96,7 +94,7 @@ export const logout = createAsyncThunk('auth/logout', async (_, { rejectWithValu
 export const fetchUserProfile = createAsyncThunk('auth/fetchUserProfile', async (_, { rejectWithValue }) => {
   try {
     // Call the backend user profile endpoint
-    const data = await authenticatedRequest('/auth/me');
+    const data = await authenticatedRequest<AuthSessionResponse>('/auth/me');
     console.log('User profile response:', data);
     return data.user;
   } catch (error) {
@@ -147,7 +145,7 @@ export const updateProfile = createAsyncThunk(
       });
 
       // Call the backend update profile endpoint
-      const data = await authenticatedRequest('/auth/update-profile', {
+      const data = await authenticatedRequest<AuthResponse>('/auth/update-profile', {
         method: 'PUT',
         body: { name, email, bio, phone, avatar: profileImage },
       });
@@ -195,12 +193,10 @@ export const changePassword = createAsyncThunk(
   ) => {
     try {
       // Call the backend change password endpoint
-      const response = await authenticatedRequest('/auth/change-password', {
+      await authenticatedRequest<MessageResponse>('/auth/change-password', {
         method: 'POST',
         body: { currentPassword, newPassword },
       });
-
-      console.log('Change password response:', response);
 
       return true;
     } catch (error) {
@@ -214,12 +210,10 @@ export const forgotPassword = createAsyncThunk(
   async ({ email }: { email: string }, { rejectWithValue }) => {
     try {
       // Call the backend forgot password endpoint
-      const response = await apiRequest('/auth/forgot-password', {
+      await apiRequest<MessageResponse>('/auth/forgot-password', {
         method: 'POST',
         body: { email },
       });
-
-      console.log('Forgot password response:', response);
 
       return true;
     } catch (error) {
@@ -233,12 +227,10 @@ export const resetPassword = createAsyncThunk(
   async ({ token, password }: { token: string; password: string }, { rejectWithValue }) => {
     try {
       // Call the backend reset password endpoint
-      const response = await apiRequest('/auth/reset-password', {
+      await apiRequest<MessageResponse>('/auth/reset-password', {
         method: 'POST',
         body: { token, password },
       });
-
-      console.log('Reset password response:', response);
 
       return true;
     } catch (error) {
@@ -264,7 +256,7 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(login.fulfilled, (state, action: PayloadAction<{ token: string; user: User }>) => {
+      .addCase(login.fulfilled, (state, action: PayloadAction<{ token: string; user: AuthUser }>) => {
         state.loading = false;
         state.user = action.payload.user;
         state.token = action.payload.token;
@@ -285,7 +277,7 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(register.fulfilled, (state, action: PayloadAction<{ token: string; user: User }>) => {
+      .addCase(register.fulfilled, (state, action: PayloadAction<{ token: string; user: AuthUser }>) => {
         state.loading = false;
         state.user = action.payload.user;
         state.token = action.payload.token;
@@ -325,7 +317,7 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(fetchUserProfile.fulfilled, (state, action: PayloadAction<User>) => {
+      .addCase(fetchUserProfile.fulfilled, (state, action: PayloadAction<AuthUser>) => {
         state.loading = false;
         state.user = action.payload;
         state.isAuthenticated = true;
@@ -347,7 +339,7 @@ const authSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(updateProfile.fulfilled, (state, action: PayloadAction<{user: User, token: string}>) => {
+      .addCase(updateProfile.fulfilled, (state, action: PayloadAction<{ user: AuthUser; token: string }>) => {
         console.log('Profile update fulfilled, updating Redux state');
         state.loading = false;
         state.user = action.payload.user;
