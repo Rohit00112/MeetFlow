@@ -1,155 +1,138 @@
 "use client";
 
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { Icon } from "@iconify/react";
-import Logo from "@/public/logo.png";
-import { useAppSelector, useAppDispatch } from "@/redux/hooks";
-import { logout } from "@/redux/slices/authSlice";
 import Link from "next/link";
-import { useState, useRef, useEffect } from "react";
+import { Icon } from "@iconify/react";
+import { useAppDispatch, useAppSelector } from "@/redux/hooks";
+import { logout } from "@/redux/slices/authSlice";
+import Logo from "@/public/google-meet-official-logo.png";
 
-// Separate time formatting logic
-const getFormattedDateTime = (): string => {
-  const now = new Date();
-  const time = now.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  });
-  const weekday = now.toLocaleDateString("en-US", { weekday: "short" });
-  const day = now.toLocaleDateString("en-US", { day: "numeric" });
-  const month = now.toLocaleDateString("en-US", { month: "short" });
-
-  return `${time} • ${weekday} ${day} ${month}`;
-};
-
-// Define icon props type
-interface IconProps {
-  icon: string;
-  size?: number;
+function formatDateTime(date: Date) {
+  return {
+    time: new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(date),
+    date: new Intl.DateTimeFormat("en-US", {
+      weekday: "short",
+      month: "short",
+      day: "numeric",
+    }).format(date),
+  };
 }
 
-// Reusable Icon component
-const NavIcon = ({ icon, size = 24 }: IconProps) => (
-  <Icon icon={icon} width={size} height={size} />
-);
+function NavbarIcon({ icon }: { icon: string }) {
+  return (
+    <button
+      type="button"
+      className="flex h-10 w-10 items-center justify-center rounded-full text-[#5f6368] transition hover:bg-[#f1f3f4]"
+    >
+      <Icon icon={icon} className="h-5 w-5" />
+    </button>
+  );
+}
 
-const Navbar = () => {
-  const { user, loading } = useAppSelector((state) => state.auth);
+export default function Navbar() {
   const dispatch = useAppDispatch();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const { user, loading } = useAppSelector((state) => state.auth);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const [isClient, setIsClient] = useState(false);
 
-  // This effect runs only on the client side
   useEffect(() => {
-    setIsClient(true);
+    const interval = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(interval);
   }, []);
 
-  // Handle clicks outside the dropdown
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
+    const handleOutsideClick = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setDropdownOpen(false);
+        setProfileMenuOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
+
+  const { time, date } = useMemo(() => formatDateTime(now), [now]);
+
+  const initials = useMemo(() => {
+    if (!user?.name) {
+      return "MF";
+    }
+
+    const segments = user.name.split(" ").filter(Boolean);
+    if (segments.length === 1) {
+      return segments[0].slice(0, 2).toUpperCase();
+    }
+
+    return `${segments[0][0]}${segments[segments.length - 1][0]}`.toUpperCase();
+  }, [user?.name]);
 
   const handleLogout = async () => {
     await dispatch(logout());
-    setDropdownOpen(false);
-  };
-
-  // Get user initials for avatar
-  const getUserInitials = () => {
-    if (!user || !user.name) return 'A';
-
-    const nameParts = user.name.split(' ');
-    if (nameParts.length === 1) return nameParts[0].charAt(0).toUpperCase();
-
-    return (nameParts[0].charAt(0) + nameParts[nameParts.length - 1].charAt(0)).toUpperCase();
+    setProfileMenuOpen(false);
   };
 
   return (
-    <nav className="flex justify-between p-4 text-[#5F6367]">
-      <div className="flex items-center">
-        <Link href="/">
-          <div className="flex items-center">
-            <Image
-              src={Logo}
-              alt="MeetFlow Logo"
-              width={120}
-              height={120}
-              priority
-            />
-            <span className="ml-1 mb-1 text-2xl">Meet</span>
-          </div>
+    <header className="border-b border-[#f1f3f4] bg-white">
+      <div className="mx-auto flex h-[72px] w-full max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-10">
+        <Link href="/" className="flex items-center gap-3">
+          <Image src={Logo} alt="Google Meet" priority className="h-10 w-auto" />
         </Link>
-      </div>
 
-      <div className="flex gap-14">
-        <div className="flex gap-6 items-center">
-          <time>{getFormattedDateTime()}</time>
-          <NavIcon icon="akar-icons:question" />
-          <NavIcon icon="octicon:report-24" />
-          <NavIcon icon="mdi:settings" />
+        <div className="hidden items-center gap-1 sm:flex">
+          <span className="mr-3 text-[22px] font-normal text-[#3c4043]">{time}</span>
+          <span className="mr-6 text-[14px] text-[#5f6368]">{date}</span>
+          <NavbarIcon icon="akar-icons:question" />
+          <NavbarIcon icon="octicon:report-24" />
+          <NavbarIcon icon="mdi:settings-outline" />
         </div>
 
-        <div className="flex gap-3 items-center">
-          <NavIcon icon="mage:dots-menu" />
+        <div className="flex items-center gap-2 sm:gap-3">
+          <NavbarIcon icon="mage:dots-menu" />
 
           {loading ? (
-            <div className="w-8 h-8 rounded-full bg-gray-200 animate-pulse"></div>
-          ) : isClient && user ? (
-            <div className="relative" ref={dropdownRef}>
+            <div className="h-10 w-10 animate-pulse rounded-full bg-[#e8eaed]" />
+          ) : user ? (
+            <div ref={dropdownRef} className="relative">
               <button
-                onClick={() => setDropdownOpen(!dropdownOpen)}
-                className="flex items-center justify-center w-8 h-8 rounded-full hover:opacity-90 transition-colors overflow-hidden"
-                aria-expanded={dropdownOpen}
-                aria-haspopup="true"
+                type="button"
+                onClick={() => setProfileMenuOpen((current) => !current)}
+                className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#1a73e8] text-sm font-medium text-white"
               >
                 {user.avatar ? (
                   <Image
                     src={user.avatar}
                     alt={user.name}
-                    width={32}
-                    height={32}
-                    className="rounded-full object-cover"
+                    width={40}
+                    height={40}
+                    className="h-full w-full object-cover"
                   />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center bg-blue-500 text-white">
-                    <span className="text-sm font-bold">{getUserInitials()}</span>
-                  </div>
+                  initials
                 )}
               </button>
 
-              {dropdownOpen && (
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
-                  <div className="px-4 py-2 border-b border-gray-200">
-                    <p className="text-sm font-medium text-gray-900 truncate">{user.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{user.email}</p>
+              {profileMenuOpen && (
+                <div className="absolute right-0 top-[calc(100%+10px)] z-20 w-60 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-[0_16px_40px_rgba(60,64,67,0.18)]">
+                  <div className="border-b border-gray-100 px-5 py-4">
+                    <p className="truncate text-sm font-medium text-[#202124]">{user.name}</p>
+                    <p className="truncate text-sm text-[#5f6368]">{user.email}</p>
                   </div>
-
-                  <Link href="/profile" onClick={() => setDropdownOpen(false)}>
-                    <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
-                      Your Profile
-                    </div>
+                  <Link
+                    href="/profile"
+                    onClick={() => setProfileMenuOpen(false)}
+                    className="block px-5 py-3 text-sm text-[#202124] transition hover:bg-[#f8f9fa]"
+                  >
+                    Manage your profile
                   </Link>
-
-                  <Link href="/settings" onClick={() => setDropdownOpen(false)}>
-                    <div className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer">
-                      Settings
-                    </div>
-                  </Link>
-
                   <button
+                    type="button"
                     onClick={handleLogout}
-                    className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 cursor-pointer"
+                    className="block w-full px-5 py-3 text-left text-sm text-[#202124] transition hover:bg-[#f8f9fa]"
                   >
                     Sign out
                   </button>
@@ -157,17 +140,15 @@ const Navbar = () => {
               )}
             </div>
           ) : (
-            <Link href="/auth/login">
-              <button className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-lg transition-colors text-sm">
-                <NavIcon icon="heroicons:login" size={16} />
-                Sign in
-              </button>
+            <Link
+              href="/auth/login"
+              className="inline-flex h-10 items-center rounded-full border border-[#dadce0] px-5 text-sm font-medium text-[#1a73e8] transition hover:bg-[#f6fafe]"
+            >
+              Sign in
             </Link>
           )}
         </div>
       </div>
-    </nav>
+    </header>
   );
-};
-
-export default Navbar;
+}
