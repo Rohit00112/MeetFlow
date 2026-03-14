@@ -2,18 +2,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { apiRequest, authenticatedRequest, getAuthToken } from "@/lib/api";
-
-// Define the User type
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  avatar?: string;
-}
+import type {
+  AuthResponse,
+  AuthSessionResponse,
+  AuthUser,
+  MessageResponse,
+} from "@/lib/types/auth";
 
 // Define the AuthContext interface
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   loading: boolean;
   error: string | null;
   login: (email: string, password: string) => Promise<void>;
@@ -31,7 +29,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Create a provider component
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const token = getAuthToken();
       if (!token) return false;
 
-      const data = await authenticatedRequest('/auth/me');
+      const data = await authenticatedRequest<AuthSessionResponse>('/auth/me');
       setUser(data.user);
       localStorage.setItem('user', JSON.stringify(data.user));
       return true;
@@ -91,7 +89,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         try {
           // Validate token with server using the authenticated request utility
           console.log('Validating token with server...');
-          const data = await authenticatedRequest('/auth/me');
+          const data = await authenticatedRequest<AuthSessionResponse>('/auth/me');
 
           // Update user data from server
           console.log('Token validated successfully, updating user data');
@@ -126,7 +124,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the API utility to make the request
-      const data = await apiRequest('/auth/login', {
+      const data = await apiRequest<AuthResponse>('/auth/login', {
         method: 'POST',
         body: { email, password },
       });
@@ -155,16 +153,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  // Helper function to get initials from name
-  const getInitials = (name: string) => {
-    return name
-      .split(' ')
-      .map(part => part[0])
-      .join('')
-      .toUpperCase()
-      .substring(0, 2);
-  };
-
   // Register function
   const register = async (name: string, email: string, password: string, profileImage?: string | null) => {
     setLoading(true);
@@ -189,7 +177,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the API utility to make the request
-      const data = await apiRequest('/auth/register', {
+      const data = await apiRequest<AuthResponse>('/auth/register', {
         method: 'POST',
         body: { name, email, password, avatar },
       });
@@ -234,7 +222,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the API utility to make the request
-      const data = await apiRequest('/auth/forgot-password', {
+      const data = await apiRequest<MessageResponse>('/auth/forgot-password', {
         method: 'POST',
         body: { email },
       });
@@ -274,7 +262,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the authenticated API utility to make the request
-      const data = await authenticatedRequest('/auth/update-profile', {
+      const data = await authenticatedRequest<AuthResponse>('/auth/update-profile', {
         method: 'PUT',
         body: { name, email, avatar },
       });
@@ -306,7 +294,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the API utility to make the request
-      await apiRequest('/auth/reset-password', {
+      await apiRequest<MessageResponse>('/auth/reset-password', {
         method: 'POST',
         body: { token, password },
       });
@@ -336,7 +324,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // Use the authenticated API utility to make the request
-      await authenticatedRequest('/auth/change-password', {
+      await authenticatedRequest<MessageResponse>('/auth/change-password', {
         method: 'POST',
         body: { currentPassword, newPassword },
       });

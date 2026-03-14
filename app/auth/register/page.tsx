@@ -7,7 +7,6 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import GoogleLogo from "@/public/google-logo.svg";
 import toast from "react-hot-toast";
 import { registerSchema } from "@/lib/validations/auth";
 import { z } from "zod";
@@ -75,7 +74,7 @@ export default function RegisterPage() {
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state: any) => state.auth);
+  const { loading, error } = useAppSelector((state) => state.auth);
   const router = useRouter();
 
   // Create object URL for preview when profile image changes
@@ -125,7 +124,7 @@ export default function RegisterPage() {
 
     try {
       // Validate form using Zod
-      const validatedData = registerSchema.parse({
+      registerSchema.parse({
         name,
         email,
         password,

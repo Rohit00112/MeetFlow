@@ -2,7 +2,7 @@
 
 import React, { useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { useAppSelector, useAppDispatch } from "@/redux/hooks";
+import { useAppDispatch } from "@/redux/hooks";
 import { changePassword as changePasswordAction } from "@/redux/slices/authSlice";
 
 interface ChangePasswordModalProps {

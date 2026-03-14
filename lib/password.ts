@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'crypto';
+import { randomBytes, scryptSync, timingSafeEqual } from 'crypto';
 
 // Hash a password using Node.js built-in crypto module
 export async function hashPassword(password: string): Promise<string> {

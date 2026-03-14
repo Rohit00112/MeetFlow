@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state: any) => state.auth);
+  const { loading, error } = useAppSelector((state) => state.auth);
   const router = useRouter();
 
   const [formError, setFormError] = useState<string | null>(null);
@@ -33,7 +33,7 @@ export default function LoginPage() {
 
     try {
       // Validate form using Zod
-      const validatedData = loginSchema.parse({ email, password });
+      loginSchema.parse({ email, password });
       console.log("Form validation passed, attempting login");
 
       const resultAction = await dispatch(loginAction({ email, password }));

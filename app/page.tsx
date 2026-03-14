@@ -70,11 +70,9 @@ const useSlider = (totalItems: number, initialIndex = 0) => {
 // ImageSlider Component
 const ImageSlider = ({ images, onImageChange }: { images: ImageProps[], onImageChange?: (image: ImageProps) => void }) => {
   const { index, isTransitioning, nextSlide, prevSlide, goToSlide } = useSlider(images.length);
-  const [currentImage, setCurrentImage] = React.useState(images[0]);
 
-  // Update currentImage and call onImageChange when index changes
+  // Update the parent slide state when index changes
   React.useEffect(() => {
-    setCurrentImage(images[index]);
     if (onImageChange) onImageChange(images[index]);
   }, [index, images, onImageChange]);
 
@@ -160,10 +158,8 @@ const ImageSlider = ({ images, onImageChange }: { images: ImageProps[], onImageC
 // Simple Dropdown Menu Component
 const SimpleDropdown = ({
   isOpen,
-  onClose,
 }: {
   isOpen: boolean;
-  onClose: () => void;
 }) => {
   const [mounted, setMounted] = React.useState(false);
 
@@ -215,7 +211,7 @@ const DebugInfo = ({ isOpen }: { isOpen: boolean }) => {
 };
 
 export default function Home() {
-  const { user } = useAppSelector((state: any) => state.auth);
+  const { user } = useAppSelector((state) => state.auth);
   const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
   const [inputValue, setInputValue] = useState("");
   const [currentSlide, setCurrentSlide] = useState<ImageProps>(images[0]);
@@ -279,7 +275,6 @@ export default function Home() {
                   </button>
                   <SimpleDropdown
                     isOpen={isDropdownOpen}
-                    onClose={() => setIsDropdownOpen(false)}
                   />
                 </div>
               ) : (

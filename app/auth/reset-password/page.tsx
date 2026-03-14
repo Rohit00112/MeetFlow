@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { useAppSelector, useAppDispatch } from "@/redux/hooks";
 import { resetPassword as resetPasswordAction } from "@/redux/slices/authSlice";
@@ -12,7 +13,7 @@ import { z } from "zod";
 
 const ResetPasswordPage = () => {
   const dispatch = useAppDispatch();
-  const { loading, error } = useAppSelector((state: any) => state.auth);
+  const { loading, error } = useAppSelector((state) => state.auth);
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -38,7 +39,7 @@ const ResetPasswordPage = () => {
 
     try {
       // Validate form using Zod
-      const validatedData = resetPasswordSchema.parse({
+      resetPasswordSchema.parse({
         token,
         password,
         confirmPassword
@@ -85,10 +86,12 @@ const ResetPasswordPage = () => {
       <div className="sm:mx-auto sm:w-full sm:max-w-md">
         <div className="flex justify-center">
           <Link href="/">
-            <img
-              className="h-12 w-auto"
+            <Image
               src="/logo.png"
               alt="MeetFlow"
+              width={144}
+              height={48}
+              className="h-12 w-auto"
             />
           </Link>
         </div>

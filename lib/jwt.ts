@@ -1,9 +1,15 @@
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-do-not-use-in-production';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as jwt.SignOptions['expiresIn'];
 
-export function signJWT(payload: any, options?: jwt.SignOptions): string {
+export interface JwtUserPayload extends jwt.JwtPayload {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export function signJWT(payload: JwtUserPayload, options?: jwt.SignOptions): string {
   console.log('Signing new JWT token with payload:', {
     id: payload.id,
     name: payload.name,

@@ -81,7 +81,7 @@ export default function ReduxProtectedLayout({
 
       return () => clearTimeout(redirectTimer);
     }
-  }, [isAuthenticated, loading, router, pathname, isClient]);
+  }, [dispatch, isAuthenticated, loading, router, pathname, isClient]);
 
   // Don't render anything on the server for protected routes
   if (!isClient) {

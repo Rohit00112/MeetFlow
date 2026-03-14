@@ -3,7 +3,7 @@
  */
 
 // Base URL for API requests
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 console.log('Using API URL:', API_URL);
 
 // Types
@@ -12,14 +12,14 @@ type RequestMethod = 'GET' | 'POST' | 'PUT' | 'DELETE';
 interface RequestOptions {
   method?: RequestMethod;
   headers?: Record<string, string>;
-  body?: any;
+  body?: unknown;
   token?: string;
 }
 
 /**
  * Make an API request
  */
-export async function apiRequest<T = any>(
+export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
@@ -63,7 +63,7 @@ export async function apiRequest<T = any>(
   console.log(`API Response status: ${response.status} ${response.statusText}`);
 
   // Parse the response
-  let data;
+  let data: unknown;
   try {
     // Check if the response is JSON
     const contentType = response.headers.get('content-type');
@@ -92,23 +92,31 @@ export async function apiRequest<T = any>(
 
   // Handle error responses
   if (!response.ok) {
+    const responseError =
+      typeof data === 'object' &&
+      data !== null &&
+      'error' in data &&
+      typeof data.error === 'string'
+        ? data.error
+        : undefined;
+
     // Create a more descriptive error message based on status code
-    let errorMessage = data?.error || 'Something went wrong';
+    let errorMessage = responseError || 'Something went wrong';
 
     if (response.status === 401) {
-      errorMessage = data?.error || 'Authentication failed. Please check your credentials.';
+      errorMessage = responseError || 'Authentication failed. Please check your credentials.';
     } else if (response.status === 403) {
-      errorMessage = data?.error || 'You do not have permission to access this resource.';
+      errorMessage = responseError || 'You do not have permission to access this resource.';
     } else if (response.status === 404) {
-      errorMessage = data?.error || 'The requested resource was not found.';
+      errorMessage = responseError || 'The requested resource was not found.';
     } else if (response.status === 500) {
-      errorMessage = data?.error || 'A server error occurred. Please try again later.';
+      errorMessage = responseError || 'A server error occurred. Please try again later.';
     }
 
     throw new Error(errorMessage);
   }
 
-  return data;
+  return data as T;
 }
 
 import { getToken, clearAuthData } from './tokenManager';
@@ -123,7 +131,7 @@ export function getAuthToken(): string | null {
 /**
  * Make an authenticated API request
  */
-export async function authenticatedRequest<T = any>(
+export async function authenticatedRequest<T = unknown>(
   endpoint: string,
   options: Omit<RequestOptions, 'token'> = {}
 ): Promise<T> {

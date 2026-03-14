@@ -7,7 +7,7 @@ import { Icon } from "@iconify/react/dist/iconify.js";
 import { useAppSelector } from "@/redux/hooks";
 
 const MeetingPage = () => {
-  const { user } = useAppSelector((state: any) => state.auth);
+  const { user } = useAppSelector((state) => state.auth);
 
   return (
     <ProtectedRoute>
