@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     command: ["pnpm", "dev", "--", "--hostname", "0.0.0.0", "--port", "3000"]
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgresql://meetflow:meetflow@postgres:5432/meetflow?schema=public}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://meetflow:meetflow@postgres:5432/meetflow?schema=public}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-development}
       LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:-devkey}
@@ -43,7 +43,7 @@ services:
       timeout: 5s
       retries: 10
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
