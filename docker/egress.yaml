@@ -1,0 +1,16 @@
+api_key: devkey
+api_secret: secret
+ws_url: ws://livekit:7880
+redis:
+  address: redis:6379
+logging:
+  level: info
+health_port: 7980
+template_port: 7981
+s3:
+  bucket: meetflow-recordings
+  endpoint: minio:9000
+  access_key: minioadmin
+  secret: minioadmin123
+  region: us-east-1
+  force_path_style: true

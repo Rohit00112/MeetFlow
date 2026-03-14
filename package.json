@@ -10,7 +10,10 @@
     "lint": "eslint . --max-warnings=0",
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json",
     "postinstall": "prisma generate",
-    "prisma:generate": "prisma generate"
+    "prisma:generate": "prisma generate",
+    "docker:up": "docker compose up --build",
+    "docker:down": "docker compose down --remove-orphans",
+    "docker:logs": "docker compose logs -f"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
