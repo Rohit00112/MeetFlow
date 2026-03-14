@@ -1,0 +1,24 @@
+name: PR Title
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - edited
+      - synchronize
+      - reopened
+
+jobs:
+  validate-title:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate conventional PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "Validating PR title: $PR_TITLE"
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|chore|docs|refactor|test|perf|ci|build|revert)(\(.+\))?!?:\ .+ ]]; then
+            echo "PR titles must follow conventional commit format."
+            echo "Example: feat: add prejoin device check"
+            exit 1
+          fi
