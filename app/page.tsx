@@ -1,338 +1,253 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Image, { type StaticImageData } from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Icon } from "@iconify/react/dist/iconify.js";
 import Navbar from "@/components/Navbar";
-import Image, { StaticImageData } from "next/image";
+import { useAppSelector } from "@/redux/hooks";
 import Image1 from "@/public/slider1.png";
 import Image2 from "@/public/slider2.png";
 import Image3 from "@/public/slider3.png";
-import { Icon } from "@iconify/react/dist/iconify.js";
-import Link from "next/link";
-import React, { useState } from "react";
-import { useAppSelector } from "@/redux/hooks";
-// Removed ProtectedRoute import as we're using ReduxProtectedLayout
 
-interface ImageProps {
+interface Slide {
   src: StaticImageData;
   alt: string;
   title: string;
   description: string;
 }
 
-const images: ImageProps[] = [
+const slides: Slide[] = [
   {
     src: Image1,
-    alt: "MeetFlow Security",
+    alt: "MeetFlow safety",
     title: "Your meeting is safe",
-    description:
-      "No one can join a meeting unless invited or admitted by the host",
+    description: "No one can join a meeting unless invited or admitted by the host.",
   },
   {
     src: Image3,
-    alt: "MeetFlow Planning",
+    alt: "MeetFlow planning",
     title: "Plan ahead",
-    description:
-      "Click New Meeting to schedule meetings in Google Calendar and send invites to participants",
+    description: "Create meetings, share invites, and keep every call organized before it starts.",
   },
   {
     src: Image2,
-    alt: "MeetFlow Sharing",
+    alt: "MeetFlow sharing",
     title: "Get a link you can share",
-    description:
-      "Click New Meeting to get a link you can send to people that you want to meet with",
+    description: "Create a meeting link in seconds and send it to the people you want to meet with.",
   },
 ];
 
-// Custom hook for smooth scrolling
-const useSlider = (totalItems: number, initialIndex = 0) => {
-  const [index, setIndex] = React.useState(initialIndex);
-  const [isTransitioning, setIsTransitioning] = React.useState(false);
-
-  const goToSlide = React.useCallback((newIndex: number) => {
-    if (isTransitioning) return;
-    setIsTransitioning(true);
-    setIndex(newIndex);
-    setTimeout(() => setIsTransitioning(false), 700); // Match transition duration
-  }, [isTransitioning]);
-
-  const nextSlide = React.useCallback(() => {
-    const newIndex = index === totalItems - 1 ? 0 : index + 1;
-    goToSlide(newIndex);
-  }, [index, totalItems, goToSlide]);
-
-  const prevSlide = React.useCallback(() => {
-    const newIndex = index === 0 ? totalItems - 1 : index - 1;
-    goToSlide(newIndex);
-  }, [index, totalItems, goToSlide]);
-
-  return { index, isTransitioning, nextSlide, prevSlide, goToSlide };
-};
-
-// ImageSlider Component
-const ImageSlider = ({ images, onImageChange }: { images: ImageProps[], onImageChange?: (image: ImageProps) => void }) => {
-  const { index, isTransitioning, nextSlide, prevSlide, goToSlide } = useSlider(images.length);
-
-  // Update the parent slide state when index changes
-  React.useEffect(() => {
-    if (onImageChange) onImageChange(images[index]);
-  }, [index, images, onImageChange]);
-
-  const handleNext = () => {
-    nextSlide();
-  };
-
-  const handlePrev = () => {
-    prevSlide();
-  };
-
-  const handleDotClick = (i: number) => {
-    if (i === index) return;
-    goToSlide(i);
-  };
-
-  // Initial setup is handled by the index effect above
-
-  return (
-    <div className="flex flex-col items-center gap-4">
-      <div className="flex items-center gap-4">
-        <button
-          onClick={handlePrev}
-          aria-label="Previous Image"
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 z-10"
-          disabled={isTransitioning}
-        >
-          <Icon icon="akar-icons:chevron-left" className="w-6 h-6" />
-        </button>
-        <div className="relative w-56 h-56 overflow-hidden rounded-full image-slider-container">
-          <div
-            className="absolute w-full h-full transition-transform duration-700"
-            style={{
-              transform: `translateX(-${index * (100 / images.length)}%)`,
-              width: `${images.length * 100}%`,
-              display: 'flex',
-              willChange: 'transform'
-            }}
-          >
-            {images.map((image, i) => (
-              <div
-                key={i}
-                className="relative w-full h-full flex-shrink-0 image-slider-item"
-                style={{ width: `${100 / images.length}%` }}
-              >
-                <Image
-                  src={image.src}
-                  alt={image.alt}
-                  fill
-                  className="object-cover"
-                  priority={i === 0}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
-        <button
-          onClick={handleNext}
-          aria-label="Next Image"
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-gray-100 z-10"
-          disabled={isTransitioning}
-        >
-          <Icon icon="akar-icons:chevron-right" className="w-6 h-6" />
-        </button>
-      </div>
-      <div className="flex gap-2 mt-4">
-        {images.map((_, i) => (
-          <button
-            key={i}
-            onClick={() => handleDotClick(i)}
-            aria-label={`Select Image ${i + 1}`}
-            className={`w-2 h-2 rounded-full transition-all duration-300 ${
-              i === index ? "bg-blue-600 w-4" : "bg-gray-300"
-            }`}
-            disabled={isTransitioning}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// Simple Dropdown Menu Component
-const SimpleDropdown = ({
-  isOpen,
+function MeetingOptionsMenu({
+  onClose,
 }: {
-  isOpen: boolean;
-}) => {
-  const [mounted, setMounted] = React.useState(false);
+  onClose: () => void;
+}) {
+  const router = useRouter();
 
-  React.useEffect(() => {
-    if (isOpen) {
-      setMounted(true);
-    } else {
-      const timer = setTimeout(() => setMounted(false), 200);
-      return () => clearTimeout(timer);
-    }
-  }, [isOpen]);
-
-  if (!mounted) return null;
+  const handleNavigate = (href: string) => {
+    onClose();
+    router.push(href);
+  };
 
   return (
-    <div
-      className={`absolute top-full left-0 mt-1 bg-white rounded-md shadow-lg py-1 w-64 border border-gray-200 z-50 transition-all duration-200 ${isOpen ? 'opacity-100 translate-y-0' : 'opacity-0 -translate-y-2'}`}
-    >
-      <button className="w-full flex items-center gap-3 hover:bg-gray-100 px-4 py-3 text-sm text-gray-700 modal-option">
-        <Icon icon="material-symbols:link-rounded" width="20" height="20" />
+    <div className="absolute left-0 top-[calc(100%+8px)] z-20 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-[0_16px_40px_rgba(60,64,67,0.18)]">
+      <button
+        type="button"
+        onClick={() => handleNavigate("/meeting")}
+        className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+      >
+        <Icon icon="material-symbols:link-rounded" className="h-5 w-5 text-[#1a73e8]" />
         <span>Create a meeting for later</span>
       </button>
       <button
-        className="w-full flex items-center gap-3 hover:bg-gray-100 px-4 py-3 text-sm text-gray-700 modal-option"
-        onClick={() => {
-          window.location.href = "/meeting";
-        }}
+        type="button"
+        onClick={() => handleNavigate("/meeting")}
+        className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
       >
-        <Icon icon="ic:baseline-plus" width="20" height="20" />
+        <Icon icon="ic:baseline-plus" className="h-5 w-5 text-[#1a73e8]" />
         <span>Start an instant meeting</span>
       </button>
-      <button className="w-full flex items-center gap-3 hover:bg-gray-100 px-4 py-3 text-sm text-gray-700 modal-option">
-        <Icon icon="lucide:calendar" width="20" height="20" />
+      <button
+        type="button"
+        onClick={() => handleNavigate("/meeting")}
+        className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
+      >
+        <Icon icon="lucide:calendar" className="h-5 w-5 text-[#1a73e8]" />
         <span>Schedule in Google Calendar</span>
       </button>
     </div>
   );
-};
+}
 
-// Debug component to show state
-const DebugInfo = ({ isOpen }: { isOpen: boolean }) => {
-  if (process.env.NODE_ENV === 'production') return null;
+function IllustrationCarousel({
+  activeIndex,
+  onChange,
+}: {
+  activeIndex: number;
+  onChange: (index: number) => void;
+}) {
+  const activeSlide = slides[activeIndex];
 
   return (
-    <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs z-[1000]">
-      Dropdown state: {isOpen ? 'OPEN' : 'CLOSED'}
-    </div>
+    <section className="flex w-full max-w-[520px] flex-col items-center text-center">
+      <div className="flex w-full items-center justify-center gap-6">
+        <button
+          type="button"
+          aria-label="Previous slide"
+          onClick={() => onChange(activeIndex === 0 ? slides.length - 1 : activeIndex - 1)}
+          className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100"
+        >
+          <Icon icon="akar-icons:chevron-left" className="h-6 w-6" />
+        </button>
+
+        <div className="relative h-72 w-72 overflow-hidden rounded-full bg-[#f1f3f4]">
+          <Image
+            src={activeSlide.src}
+            alt={activeSlide.alt}
+            fill
+            priority
+            className="object-cover"
+          />
+        </div>
+
+        <button
+          type="button"
+          aria-label="Next slide"
+          onClick={() => onChange(activeIndex === slides.length - 1 ? 0 : activeIndex + 1)}
+          className="flex h-11 w-11 items-center justify-center rounded-full text-gray-500 transition hover:bg-gray-100"
+        >
+          <Icon icon="akar-icons:chevron-right" className="h-6 w-6" />
+        </button>
+      </div>
+
+      <div className="mt-8 flex gap-2">
+        {slides.map((slide, index) => (
+          <button
+            key={slide.title}
+            type="button"
+            aria-label={`Show ${slide.title}`}
+            onClick={() => onChange(index)}
+            className={`h-2.5 rounded-full transition-all ${
+              index === activeIndex ? "w-6 bg-[#1a73e8]" : "w-2.5 bg-gray-300"
+            }`}
+          />
+        ))}
+      </div>
+
+      <div className="mt-8 max-w-[380px] space-y-3">
+        <h2 className="text-[28px] font-normal leading-tight text-[#202124]">
+          {activeSlide.title}
+        </h2>
+        <p className="text-[15px] leading-6 text-[#5f6368]">{activeSlide.description}</p>
+      </div>
+    </section>
   );
-};
+}
 
 export default function Home() {
+  const router = useRouter();
   const { user } = useAppSelector((state) => state.auth);
-  const [isDropdownOpen, setIsDropdownOpen] = React.useState(false);
-  const [inputValue, setInputValue] = useState("");
-  const [currentSlide, setCurrentSlide] = useState<ImageProps>(images[0]);
-  const [isClient, setIsClient] = React.useState(false);
-  const dropdownRef = React.useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [meetingCode, setMeetingCode] = useState("");
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // This effect runs only on the client side
-  React.useEffect(() => {
-    setIsClient(true);
-  }, []);
+  useEffect(() => {
+    if (!menuOpen) {
+      return;
+    }
 
-  // Log state changes
-  React.useEffect(() => {
-    console.log('Dropdown state changed:', isDropdownOpen);
-  }, [isDropdownOpen]);
-
-  // Add click outside handler
-  React.useEffect(() => {
-    if (!isDropdownOpen) return;
-
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsDropdownOpen(false);
+    const handleOutsideClick = (event: MouseEvent) => {
+      const target = event.target as HTMLElement;
+      if (!target.closest("[data-meeting-menu]")) {
+        setMenuOpen(false);
       }
     };
 
-    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleOutsideClick);
+
     return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener("mousedown", handleOutsideClick);
     };
-  }, [isDropdownOpen]);
+  }, [menuOpen]);
+
+  const handleJoin = () => {
+    if (!meetingCode.trim()) {
+      return;
+    }
+
+    router.push(`/meeting?code=${encodeURIComponent(meetingCode.trim())}`);
+  };
 
   return (
     <>
-      <DebugInfo isOpen={isDropdownOpen} />
       <Navbar />
-      <main className="px-4 md:px-6 mt-20 md:mt-52 ml-12">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
-          <div className="space-y-6">
-            <h1 className="text-4xl md:text-5xl leading-tight">
-              Video calls and meetings for everyone
-            </h1>
-            <p className="text-xl md:text-2xl text-gray-600">
-              Connect, collaborate, and celebrate from anywhere with Google Meet
-            </p>
-            <div className="flex flex-col sm:flex-row gap-4">
-              {isClient && user ? (
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => {
-                      console.log('Button clicked, current state:', isDropdownOpen);
-                      setIsDropdownOpen(!isDropdownOpen);
-                    }}
-                    className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors"
-                    aria-label="Open meeting options"
-                    aria-expanded={isDropdownOpen}
-                    aria-haspopup="true"
-                  >
-                    <Icon icon="ri:video-add-line" className="w-5 h-5" />
-                    New Meeting
-                  </button>
-                  <SimpleDropdown
-                    isOpen={isDropdownOpen}
-                  />
-                </div>
-              ) : (
-                <Link href="/auth/login">
-                  <button className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg transition-colors">
-                    <Icon icon="ri:video-add-line" className="w-5 h-5" />
-                    New Meeting
-                  </button>
-                </Link>
-              )}
-              <div className="flex items-center gap-2 border-2 border-gray-300 rounded-lg px-3 py-2 focus-within:border-blue-600">
-                <Icon
-                  icon="material-symbols:keyboard-outline"
-                  className="w-5 h-5 text-gray-500"
-                />
-                <input
-                  type="text"
-                  placeholder="Enter a code or link"
-                  className="flex-1 outline-none text-gray-700"
-                  aria-label="Meeting code"
-                  onChange={(e) => setInputValue(e.target.value)}
-                />
+      <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-[1400px] flex-col justify-center px-6 pb-16 pt-8 lg:flex-row lg:items-center lg:gap-16 lg:px-16 lg:pt-12">
+        <section className="w-full max-w-[640px]">
+          <h1 className="max-w-[580px] text-[44px] font-normal leading-[1.15] tracking-[-0.01em] text-[#202124] lg:text-[56px]">
+            Premium video meetings. Now free for everyone.
+          </h1>
+          <p className="mt-4 max-w-[520px] text-[18px] leading-8 text-[#5f6368]">
+            We re-engineered the service we built for secure business meetings, Google Meet,
+            to make it free and available for all.
+          </p>
+
+          <div className="mt-12 flex flex-col gap-4 sm:flex-row sm:items-center">
+            {user ? (
+              <div data-meeting-menu className="relative">
+                <button
+                  type="button"
+                  onClick={() => setMenuOpen((current) => !current)}
+                  className="inline-flex h-12 items-center gap-3 rounded-full bg-[#1a73e8] px-6 text-[15px] font-medium text-white shadow-sm transition hover:bg-[#1765cc]"
+                >
+                  <Icon icon="ri:video-add-line" className="h-5 w-5" />
+                  <span>New meeting</span>
+                </button>
+                {menuOpen && <MeetingOptionsMenu onClose={() => setMenuOpen(false)} />}
               </div>
-              <div className="mt-3">
-                <Link href="/join" legacyBehavior>
-                  <a
-                    className={`text-blue-600 ${
-                      !inputValue
-                        ? "pointer-events-none text-gray-600 opacity-50"
-                        : "hover:underline"
-                    }`}
-                  >
-                    Join
-                  </a>
-                </Link>
-              </div>
+            ) : (
+              <Link
+                href="/auth/login"
+                className="inline-flex h-12 items-center gap-3 rounded-full bg-[#1a73e8] px-6 text-[15px] font-medium text-white shadow-sm transition hover:bg-[#1765cc]"
+              >
+                <Icon icon="ri:video-add-line" className="h-5 w-5" />
+                <span>New meeting</span>
+              </Link>
+            )}
+
+            <div className="flex h-12 flex-1 items-center rounded-full border border-[#dadce0] px-4 shadow-sm transition focus-within:border-[#1a73e8] focus-within:shadow-[0_0_0_1px_#1a73e8]">
+              <Icon icon="material-symbols:keyboard-outline" className="h-5 w-5 text-[#5f6368]" />
+              <input
+                type="text"
+                value={meetingCode}
+                onChange={(event) => setMeetingCode(event.target.value)}
+                placeholder="Enter a code or link"
+                aria-label="Enter a code or link"
+                className="ml-3 w-full border-0 bg-transparent text-[16px] text-[#202124] outline-none placeholder:text-[#5f6368]"
+              />
             </div>
-            <hr className="border-t border-gray-600" />
-            <p className="text-xs">
-              <Link href="/learn-more" legacyBehavior>
-                <a className="text-blue-600 hover:underline">Learn more</a>
-              </Link>{" "}
-              about Google Meet
-            </p>
+
+            <button
+              type="button"
+              onClick={handleJoin}
+              disabled={!meetingCode.trim()}
+              className="h-12 rounded-full px-4 text-[15px] font-medium text-[#1a73e8] transition enabled:hover:bg-[#f6fafe] disabled:cursor-not-allowed disabled:text-[#9aa0a6]"
+            >
+              Join
+            </button>
           </div>
 
-          <div className="flex flex-col items-center text-center space-y-6">
-            <ImageSlider
-              images={images}
-              onImageChange={setCurrentSlide}
-            />
-            <div className="max-w-md space-y-3">
-              <h2 className="text-2xl font-semibold text-gray-800">
-                {currentSlide.title}
-              </h2>
-              <p className="text-gray-600">{currentSlide.description}</p>
-            </div>
+          <div className="mt-12 border-t border-[#dadce0] pt-10 text-[14px] leading-6 text-[#5f6368]">
+            <Link href="/" className="font-medium text-[#1a73e8] hover:underline">
+              Learn more
+            </Link>{" "}
+            about Google Meet
           </div>
+        </section>
+
+        <div className="mt-16 flex w-full justify-center lg:mt-0">
+          <IllustrationCarousel activeIndex={activeIndex} onChange={setActiveIndex} />
         </div>
       </main>
     </>
