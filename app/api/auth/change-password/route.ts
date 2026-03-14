@@ -52,7 +52,14 @@ export async function POST(request: NextRequest) {
         { status: 404 }
       );
     }
-    
+
+    if (!user.password) {
+      return NextResponse.json(
+        { error: 'Password login is not enabled for this account' },
+        { status: 400 }
+      );
+    }
+
     // Verify current password
     const isPasswordValid = await comparePassword(currentPassword, user.password);
     
