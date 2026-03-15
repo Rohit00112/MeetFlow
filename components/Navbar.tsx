@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
-import { useAppDispatch, useAppSelector } from "@/redux/hooks";
-import { logout } from "@/redux/slices/authSlice";
+import { signOut, useSession } from "next-auth/react";
 import Logo from "@/public/google-meet-official-logo.png";
+import { getInitials, resolveAvatar } from "@/lib/avatar";
 
 function formatDateTime(date: Date) {
   return {
@@ -34,8 +34,9 @@ function NavbarIcon({ icon }: { icon: string }) {
 }
 
 export default function Navbar() {
-  const dispatch = useAppDispatch();
-  const { user, loading } = useAppSelector((state) => state.auth);
+  const { data: session, status } = useSession();
+  const user = session?.user;
+  const loading = status === "loading";
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -56,23 +57,12 @@ export default function Navbar() {
     return () => document.removeEventListener("mousedown", handleOutsideClick);
   }, []);
 
-  const { time, date } = useMemo(() => formatDateTime(now), [now]);
-
-  const initials = useMemo(() => {
-    if (!user?.name) {
-      return "MF";
-    }
-
-    const segments = user.name.split(" ").filter(Boolean);
-    if (segments.length === 1) {
-      return segments[0].slice(0, 2).toUpperCase();
-    }
-
-    return `${segments[0][0]}${segments[segments.length - 1][0]}`.toUpperCase();
-  }, [user?.name]);
+  const { time, date } = formatDateTime(now);
+  const initials = getInitials(user?.name);
+  const avatar = user ? resolveAvatar(user) : null;
 
   const handleLogout = async () => {
-    await dispatch(logout());
+    await signOut({ callbackUrl: "/" });
     setProfileMenuOpen(false);
   };
 
@@ -103,10 +93,10 @@ export default function Navbar() {
                 onClick={() => setProfileMenuOpen((current) => !current)}
                 className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-full bg-[#1a73e8] text-sm font-medium text-white"
               >
-                {user.avatar ? (
+                {avatar ? (
                   <Image
-                    src={user.avatar}
-                    alt={user.name}
+                    src={avatar}
+                    alt={user.name || "Profile"}
                     width={40}
                     height={40}
                     className="h-full w-full object-cover"

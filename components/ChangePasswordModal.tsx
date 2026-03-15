@@ -2,8 +2,6 @@
 
 import React, { useState } from "react";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { useAppDispatch } from "@/redux/hooks";
-import { changePassword as changePasswordAction } from "@/redux/slices/authSlice";
 
 interface ChangePasswordModalProps {
   isOpen: boolean;
@@ -11,8 +9,6 @@ interface ChangePasswordModalProps {
 }
 
 const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClose }) => {
-  const dispatch = useAppDispatch();
-
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -22,7 +18,6 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Reset form when modal is opened/closed
   React.useEffect(() => {
     if (isOpen) {
       setCurrentPassword("");
@@ -33,202 +28,174 @@ const ChangePasswordModal: React.FC<ChangePasswordModalProps> = ({ isOpen, onClo
     }
   }, [isOpen]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
     setError(null);
 
-    // Validate passwords
     if (!currentPassword || !newPassword || !confirmPassword) {
-      setError("All fields are required");
+      setError("All fields are required.");
       return;
     }
 
-    if (newPassword.length < 6) {
-      setError("New password must be at least 6 characters");
+    if (newPassword.length < 8) {
+      setError("New password must be at least 8 characters.");
       return;
     }
 
     if (newPassword !== confirmPassword) {
-      setError("New passwords do not match");
+      setError("New passwords do not match.");
       return;
     }
 
     setLoading(true);
 
     try {
-      const resultAction = await dispatch(changePasswordAction({ currentPassword, newPassword }));
+      const response = await fetch("/api/auth/change-password", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      });
 
-      if (changePasswordAction.fulfilled.match(resultAction)) {
-        setSuccess(true);
+      const data = (await response.json()) as { error?: string };
 
-        // Close modal after 2 seconds
-        setTimeout(() => {
-          onClose();
-        }, 2000);
-      } else if (changePasswordAction.rejected.match(resultAction)) {
-        // Handle the rejected action
-        setError(resultAction.payload as string || "Failed to change password");
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to change password.");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to change password");
+
+      setSuccess(true);
+      window.setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (changePasswordError) {
+      setError(
+        changePasswordError instanceof Error
+          ? changePasswordError.message
+          : "Failed to change password.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    return null;
+  }
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75" onClick={onClose}></div>
+      <div className="flex min-h-screen items-center justify-center px-4 py-8 text-center">
+        <button
+          type="button"
+          className="fixed inset-0 bg-[rgba(32,33,36,0.38)]"
+          onClick={onClose}
+          aria-label="Close password dialog"
+        />
 
-        {/* Modal panel */}
-        <div className="inline-block overflow-hidden text-left align-bottom transition-all transform bg-white rounded-lg shadow-xl sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="px-4 pt-5 pb-4 bg-white sm:p-6 sm:pb-4">
-            <div className="sm:flex sm:items-start">
-              <div className="flex items-center justify-center flex-shrink-0 w-12 h-12 mx-auto bg-blue-100 rounded-full sm:mx-0 sm:h-10 sm:w-10">
-                <Icon icon="heroicons:key" className="w-6 h-6 text-blue-600" />
+        <div className="relative w-full max-w-lg overflow-hidden rounded-[28px] bg-white text-left shadow-[0_24px_80px_rgba(60,64,67,0.3)]">
+          <div className="border-b border-[#edf1f7] px-6 py-5">
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#e8f0fe] text-[#1a73e8]">
+                <Icon icon="heroicons:key" className="h-5 w-5" />
               </div>
-              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                <h3 className="text-lg font-medium leading-6 text-gray-900">Change Password</h3>
-                <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    Update your password to keep your account secure. Your new password must be at least 6 characters long.
-                  </p>
-                </div>
+              <div>
+                <h2 className="text-lg font-medium text-[#202124]">Change password</h2>
+                <p className="mt-1 text-sm leading-6 text-[#5f6368]">
+                  Update the password for your credentials account.
+                </p>
               </div>
             </div>
-
-            {error && (
-              <div className="p-4 mt-4 rounded-md bg-red-50">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <Icon icon="heroicons:exclamation-circle" className="w-5 h-5 text-red-400" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-red-800">{error}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {success && (
-              <div className="p-4 mt-4 rounded-md bg-green-50">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <Icon icon="heroicons:check-circle" className="w-5 h-5 text-green-400" />
-                  </div>
-                  <div className="ml-3">
-                    <p className="text-sm font-medium text-green-800">
-                      Password changed successfully!
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit} className="mt-4">
-              <div className="space-y-4">
-                <div>
-                  <label htmlFor="current-password" className="block text-sm font-medium text-gray-700">
-                    Current Password
-                  </label>
-                  <div className="relative mt-1">
-                    <input
-                      id="current-password"
-                      name="current-password"
-                      type={showCurrentPassword ? "text" : "password"}
-                      value={currentPassword}
-                      onChange={(e) => setCurrentPassword(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="Enter your current password"
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 flex items-center pr-3"
-                      onClick={() => setShowCurrentPassword(!showCurrentPassword)}
-                    >
-                      <Icon
-                        icon={showCurrentPassword ? "heroicons:eye-slash" : "heroicons:eye"}
-                        className="w-5 h-5 text-gray-400"
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="new-password" className="block text-sm font-medium text-gray-700">
-                    New Password
-                  </label>
-                  <div className="relative mt-1">
-                    <input
-                      id="new-password"
-                      name="new-password"
-                      type={showNewPassword ? "text" : "password"}
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="Enter your new password"
-                    />
-                    <button
-                      type="button"
-                      className="absolute inset-y-0 right-0 flex items-center pr-3"
-                      onClick={() => setShowNewPassword(!showNewPassword)}
-                    >
-                      <Icon
-                        icon={showNewPassword ? "heroicons:eye-slash" : "heroicons:eye"}
-                        className="w-5 h-5 text-gray-400"
-                      />
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label htmlFor="confirm-password" className="block text-sm font-medium text-gray-700">
-                    Confirm New Password
-                  </label>
-                  <div className="mt-1">
-                    <input
-                      id="confirm-password"
-                      name="confirm-password"
-                      type={showNewPassword ? "text" : "password"}
-                      value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="Confirm your new password"
-                    />
-                  </div>
-                </div>
-              </div>
-            </form>
           </div>
 
-          <div className="px-4 py-3 bg-gray-50 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={loading || success}
-              className="inline-flex justify-center w-full px-4 py-2 text-base font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:ml-3 sm:w-auto sm:text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? (
-                <>
-                  <Icon icon="eos-icons:loading" className="w-5 h-5 mr-2 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                "Change Password"
-              )}
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="inline-flex justify-center w-full px-4 py-2 mt-3 text-base font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-            >
-              Cancel
-            </button>
-          </div>
+          <form className="space-y-5 px-6 py-6" onSubmit={handleSubmit}>
+            {error ? (
+              <div className="rounded-2xl border border-[#f9dedc] bg-[#fce8e6] px-4 py-3 text-sm text-[#b3261e]">
+                {error}
+              </div>
+            ) : null}
+
+            {success ? (
+              <div className="rounded-2xl border border-[#c4eed0] bg-[#e6f4ea] px-4 py-3 text-sm text-[#137333]">
+                Password changed successfully.
+              </div>
+            ) : null}
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[#202124]">Current password</span>
+              <div className="relative">
+                <input
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={(event) => setCurrentPassword(event.target.value)}
+                  className="h-14 w-full rounded-2xl border border-[#dadce0] px-4 pr-12 text-[15px] text-[#202124] outline-none transition focus:border-[#1a73e8] focus:shadow-[0_0_0_1px_#1a73e8]"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-[#5f6368]"
+                  onClick={() => setShowCurrentPassword((current) => !current)}
+                >
+                  <Icon
+                    icon={showCurrentPassword ? "heroicons:eye-slash" : "heroicons:eye"}
+                    className="h-5 w-5"
+                  />
+                </button>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[#202124]">New password</span>
+              <div className="relative">
+                <input
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={(event) => setNewPassword(event.target.value)}
+                  className="h-14 w-full rounded-2xl border border-[#dadce0] px-4 pr-12 text-[15px] text-[#202124] outline-none transition focus:border-[#1a73e8] focus:shadow-[0_0_0_1px_#1a73e8]"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 flex w-12 items-center justify-center text-[#5f6368]"
+                  onClick={() => setShowNewPassword((current) => !current)}
+                >
+                  <Icon
+                    icon={showNewPassword ? "heroicons:eye-slash" : "heroicons:eye"}
+                    className="h-5 w-5"
+                  />
+                </button>
+              </div>
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-medium text-[#202124]">Confirm new password</span>
+              <input
+                type={showNewPassword ? "text" : "password"}
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="h-14 w-full rounded-2xl border border-[#dadce0] px-4 text-[15px] text-[#202124] outline-none transition focus:border-[#1a73e8] focus:shadow-[0_0_0_1px_#1a73e8]"
+              />
+            </label>
+
+            <div className="flex flex-col-reverse gap-3 pt-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={onClose}
+                className="inline-flex h-11 items-center justify-center rounded-full border border-[#dadce0] px-5 text-sm font-medium text-[#202124] transition hover:bg-[#f8f9fa]"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={loading || success}
+                className="inline-flex h-11 items-center justify-center rounded-full bg-[#1a73e8] px-5 text-sm font-medium text-white transition hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:bg-[#9bbcf2]"
+              >
+                {loading ? (
+                  <Icon icon="eos-icons:loading" className="h-5 w-5 animate-spin" />
+                ) : (
+                  "Change password"
+                )}
+              </button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

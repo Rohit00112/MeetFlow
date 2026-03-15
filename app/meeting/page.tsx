@@ -1,16 +1,18 @@
-"use client";
-
 import React from "react";
+import { auth } from "@/auth";
+import { redirect } from "next/navigation";
 import Navbar from "@/components/Navbar";
-import ProtectedRoute from "@/components/ProtectedRoute";
 import { Icon } from "@iconify/react/dist/iconify.js";
-import { useAppSelector } from "@/redux/hooks";
 
-const MeetingPage = () => {
-  const { user } = useAppSelector((state) => state.auth);
+const MeetingPage = async () => {
+  const session = await auth();
+
+  if (!session?.user) {
+    redirect("/auth/login?callbackUrl=/meeting");
+  }
 
   return (
-    <ProtectedRoute>
+    <>
       <Navbar />
       <main className="px-4 md:px-6 py-8 max-w-7xl mx-auto">
         <div className="bg-white rounded-lg shadow-md p-6">
@@ -56,9 +58,9 @@ const MeetingPage = () => {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <div className="w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                        {user?.name?.charAt(0) || 'U'}
+                        {session.user.name?.charAt(0) || 'U'}
                       </div>
-                      <span>{user?.name || 'You'} (Host)</span>
+                      <span>{session.user.name || 'You'} (Host)</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button className="p-1 text-gray-500 hover:text-gray-700">
@@ -90,7 +92,7 @@ const MeetingPage = () => {
           </div>
         </div>
       </main>
-    </ProtectedRoute>
+    </>
   );
 };
 

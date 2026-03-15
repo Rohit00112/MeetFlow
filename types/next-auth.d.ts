@@ -13,6 +13,7 @@ declare module "next-auth" {
   }
 
   interface User {
+    image?: string | null;
     avatar?: string | null;
     bio?: string | null;
     phone?: string | null;

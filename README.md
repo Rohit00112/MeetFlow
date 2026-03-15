@@ -28,6 +28,9 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 `DATABASE_URL` in `.env` is for running the Next.js app on your host machine.
 `DOCKER_DATABASE_URL` is used only by the `web` container inside Docker Compose.
 
+To enable Google OAuth sign-in locally, set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` in `.env`.
+The forgot-password flow returns the reset link directly in development so you can complete it without an email service.
+
 ## Docker Stack
 
 Copy the local environment template and start the full development stack:

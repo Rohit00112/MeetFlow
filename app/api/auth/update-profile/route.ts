@@ -1,99 +1,73 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyJWT, signJWT } from '@/lib/jwt';
+import { auth } from "@/auth";
+import { prisma } from "@/lib/prisma";
+import { updateProfileSchema } from "@/lib/validations/auth";
+import { Prisma } from "@prisma/client";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+const updateProfileRequestSchema = updateProfileSchema.extend({
+  avatar: z.string().nullable().optional(),
+});
 
 export async function PUT(request: NextRequest) {
-  console.log('Update profile API called');
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    // Get authorization header
-    const authHeader = request.headers.get('authorization');
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Extract token
-    const token = authHeader.split(' ')[1];
-
-    // Verify token
-    const payload = verifyJWT<{ id: string }>(token);
-
-    if (!payload || !payload.id) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-
-    // Parse request body
     const body = await request.json();
-    const { name, email, bio, phone, avatar } = body;
-    console.log('Profile update request received:', {
-      name,
-      email,
-      bio: bio || null,
-      phone: phone || null,
-      hasAvatar: !!avatar
-    });
+    const parsed = updateProfileRequestSchema.safeParse(body);
 
-    // Process avatar if provided
-    let avatarUrl = undefined;
-    if (avatar && typeof avatar === 'string' && avatar.startsWith('data:image')) {
-      console.log('Processing profile image');
-      // In a real implementation, you would upload this to a storage service
-      // For now, we'll just use the base64 string
-      avatarUrl = avatar;
-      console.log('Profile image processed successfully');
+    if (!parsed.success) {
+      const message = Object.values(parsed.error.flatten().fieldErrors)
+        .flat()
+        .join(", ");
+
+      return NextResponse.json({ error: message }, { status: 400 });
     }
 
-    // Update user
     const updatedUser = await prisma.user.update({
-      where: { id: payload.id },
+      where: { id: session.user.id },
       data: {
-        name,
-        email,
-        ...(bio !== undefined && { bio }),
-        ...(phone !== undefined && { phone }),
-        ...(avatarUrl && { avatar: avatarUrl }),
+        name: parsed.data.name,
+        email: parsed.data.email.toLowerCase(),
+        bio: parsed.data.bio ?? null,
+        phone: parsed.data.phone ?? null,
+        ...(parsed.data.avatar
+          ? {
+              avatar: parsed.data.avatar,
+              image: parsed.data.avatar,
+            }
+          : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        avatar: true,
+        image: true,
+        bio: true,
+        phone: true,
       },
     });
 
-    console.log('User profile updated successfully');
-
-    // Generate a new token with updated user data
-    const newToken = await signJWT({
-      id: updatedUser.id,
-      email: updatedUser.email,
-      name: updatedUser.name,
-    });
-
-    console.log('Generated new token after profile update');
-
-    // Prepare response data
-    const responseData = {
-      user: {
-        id: updatedUser.id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        bio: updatedUser.bio,
-        phone: updatedUser.phone,
-        avatar: updatedUser.avatar,
-      },
-      token: newToken,
-    };
-
-    console.log('Sending response with new token and updated user data');
-
-    // Return updated user data and new token
-    return NextResponse.json(responseData);
+    return NextResponse.json({ user: updatedUser });
   } catch (error) {
-    console.error('Update profile error:', error);
+    if (
+      error instanceof Prisma.PrismaClientKnownRequestError &&
+      error.code === "P2002"
+    ) {
+      return NextResponse.json(
+        { error: "That email address is already in use." },
+        { status: 409 },
+      );
+    }
+
     return NextResponse.json(
-      { error: 'An error occurred while updating profile' },
-      { status: 500 }
+      { error: "An error occurred while updating your profile." },
+      { status: 500 },
     );
   }
 }

@@ -6,6 +6,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { comparePassword } from "@/lib/password";
+import { resolveAvatar } from "@/lib/avatar";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -72,23 +73,83 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
   },
   providers,
   callbacks: {
-    jwt({ token, user }) {
+    async signIn({ user, account }) {
+      if (account?.provider === "google" && user.id && user.image) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            image: user.image,
+            avatar: user.image,
+          },
+        });
+      }
+
+      return true;
+    },
+    jwt({ token, user, trigger, session }) {
       if (user) {
         token.id = user.id;
-        token.avatar = user.avatar ?? null;
+        token.name = user.name;
+        token.email = user.email;
+        token.avatar = resolveAvatar(user);
+        token.picture = token.avatar;
         token.bio = user.bio ?? null;
         token.phone = user.phone ?? null;
+      }
+
+      if (trigger === "update" && session) {
+        const sessionUser =
+          typeof session === "object" &&
+          session !== null &&
+          "user" in session &&
+          typeof session.user === "object" &&
+          session.user !== null
+            ? session.user
+            : session;
+
+        if ("name" in sessionUser && typeof sessionUser.name === "string") {
+          token.name = sessionUser.name;
+        }
+
+        if ("email" in sessionUser && typeof sessionUser.email === "string") {
+          token.email = sessionUser.email;
+        }
+
+        if ("avatar" in sessionUser && typeof sessionUser.avatar === "string") {
+          token.avatar = sessionUser.avatar;
+          token.picture = sessionUser.avatar;
+        } else if ("image" in sessionUser && typeof sessionUser.image === "string") {
+          token.avatar = sessionUser.image;
+          token.picture = sessionUser.image;
+        }
+
+        if ("bio" in sessionUser) {
+          token.bio = typeof sessionUser.bio === "string" ? sessionUser.bio : null;
+        }
+
+        if ("phone" in sessionUser) {
+          token.phone = typeof sessionUser.phone === "string" ? sessionUser.phone : null;
+        }
       }
 
       return token;
     },
     session({ session, token }) {
       if (session.user) {
-        session.user.id = typeof token.id === "string" ? token.id : "";
+        session.user.id = typeof token.id === "string" ? token.id : token.sub ?? "";
+        session.user.name =
+          typeof token.name === "string" ? token.name : session.user.name ?? null;
+        session.user.email =
+          typeof token.email === "string" ? token.email : session.user.email ?? null;
         session.user.avatar = typeof token.avatar === "string" ? token.avatar : null;
         session.user.bio = typeof token.bio === "string" ? token.bio : null;
         session.user.phone = typeof token.phone === "string" ? token.phone : null;
-        session.user.image = typeof token.avatar === "string" ? token.avatar : session.user.image ?? null;
+        session.user.image =
+          typeof token.avatar === "string"
+            ? token.avatar
+            : typeof token.picture === "string"
+              ? token.picture
+              : session.user.image ?? null;
       }
 
       return session;
