@@ -1,93 +1,75 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
-import { verifyJWT } from '@/lib/jwt';
-import { comparePassword, hashPassword } from '@/lib/password';
+import { auth } from "@/auth";
+import { comparePassword, hashPassword } from "@/lib/password";
+import { prisma } from "@/lib/prisma";
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+
+const changePasswordRequestSchema = z.object({
+  currentPassword: z.string().min(1, { message: "Current password is required." }),
+  newPassword: z
+    .string()
+    .min(8, { message: "New password must be at least 8 characters." }),
+});
 
 export async function POST(request: NextRequest) {
-  console.log('Change password API called');
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   try {
-    // Get authorization header
-    const authHeader = request.headers.get('authorization');
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-    
-    // Extract token
-    const token = authHeader.split(' ')[1];
-    
-    // Verify token
-    const payload = verifyJWT<{ id: string }>(token);
-    
-    if (!payload || !payload.id) {
-      return NextResponse.json(
-        { error: 'Invalid token' },
-        { status: 401 }
-      );
-    }
-    
-    // Parse request body
     const body = await request.json();
-    const { currentPassword, newPassword } = body;
-    
-    // Validate input
-    if (!currentPassword || !newPassword) {
-      return NextResponse.json(
-        { error: 'Current password and new password are required' },
-        { status: 400 }
-      );
+    const parsed = changePasswordRequestSchema.safeParse(body);
+
+    if (!parsed.success) {
+      const message = Object.values(parsed.error.flatten().fieldErrors)
+        .flat()
+        .join(", ");
+
+      return NextResponse.json({ error: message }, { status: 400 });
     }
-    
-    // Get user from database
+
     const user = await prisma.user.findUnique({
-      where: { id: payload.id },
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        password: true,
+      },
     });
-    
+
     if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "User not found." }, { status: 404 });
     }
 
     if (!user.password) {
       return NextResponse.json(
-        { error: 'Password login is not enabled for this account' },
-        { status: 400 }
+        { error: "Password sign-in is not enabled for this account." },
+        { status: 400 },
       );
     }
 
-    // Verify current password
-    const isPasswordValid = await comparePassword(currentPassword, user.password);
-    
-    if (!isPasswordValid) {
+    const matches = await comparePassword(parsed.data.currentPassword, user.password);
+
+    if (!matches) {
       return NextResponse.json(
-        { error: 'Current password is incorrect' },
-        { status: 401 }
+        { error: "Your current password is incorrect." },
+        { status: 401 },
       );
     }
-    
-    // Hash new password
-    const hashedPassword = await hashPassword(newPassword);
-    
-    // Update user password
+
     await prisma.user.update({
       where: { id: user.id },
-      data: { password: hashedPassword },
+      data: {
+        password: await hashPassword(parsed.data.newPassword),
+      },
     });
-    
-    console.log('Password changed successfully for user:', user.email);
-    
-    // Return success response
-    return NextResponse.json({ message: 'Password changed successfully' });
-  } catch (error) {
-    console.error('Change password error:', error);
+
+    return NextResponse.json({ message: "Password changed successfully." });
+  } catch {
     return NextResponse.json(
-      { error: 'An error occurred while changing password' },
-      { status: 500 }
+      { error: "An error occurred while changing your password." },
+      { status: 500 },
     );
   }
 }

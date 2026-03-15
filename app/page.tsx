@@ -5,8 +5,8 @@ import Image, { type StaticImageData } from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react/dist/iconify.js";
+import { useSession } from "next-auth/react";
 import Navbar from "@/components/Navbar";
-import { useAppSelector } from "@/redux/hooks";
 import Image1 from "@/public/slider1.png";
 import Image2 from "@/public/slider2.png";
 import Image3 from "@/public/slider3.png";
@@ -148,7 +148,8 @@ function IllustrationCarousel({
 
 export default function Home() {
   const router = useRouter();
-  const { user } = useAppSelector((state) => state.auth);
+  const { data: session } = useSession();
+  const user = session?.user;
   const [activeIndex, setActiveIndex] = useState(0);
   const [meetingCode, setMeetingCode] = useState("");
   const [menuOpen, setMenuOpen] = useState(false);
