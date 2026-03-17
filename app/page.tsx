@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { useSession } from "next-auth/react";
+import { buildMeetingJoinPath, extractMeetingCode, formatMeetingSchedule } from "@/lib/meetings";
+import type { MeetingSummary } from "@/lib/types/meetings";
 import Navbar from "@/components/Navbar";
 import Image1 from "@/public/slider1.png";
 import Image2 from "@/public/slider2.png";
@@ -55,7 +57,7 @@ function MeetingOptionsMenu({
     <div className="absolute left-0 top-[calc(100%+8px)] z-20 w-72 overflow-hidden rounded-2xl border border-gray-200 bg-white py-2 shadow-[0_16px_40px_rgba(60,64,67,0.18)]">
       <button
         type="button"
-        onClick={() => handleNavigate("/meeting")}
+        onClick={() => handleNavigate("/meetings?compose=later")}
         className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
       >
         <Icon icon="material-symbols:link-rounded" className="h-5 w-5 text-[#1a73e8]" />
@@ -63,7 +65,7 @@ function MeetingOptionsMenu({
       </button>
       <button
         type="button"
-        onClick={() => handleNavigate("/meeting")}
+        onClick={() => handleNavigate("/meetings?compose=instant")}
         className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
       >
         <Icon icon="ic:baseline-plus" className="h-5 w-5 text-[#1a73e8]" />
@@ -71,7 +73,7 @@ function MeetingOptionsMenu({
       </button>
       <button
         type="button"
-        onClick={() => handleNavigate("/meeting")}
+        onClick={() => handleNavigate("/meetings?compose=calendar")}
         className="flex w-full items-center gap-4 px-5 py-3 text-left text-sm text-gray-700 transition hover:bg-gray-50"
       >
         <Icon icon="lucide:calendar" className="h-5 w-5 text-[#1a73e8]" />
@@ -152,7 +154,10 @@ export default function Home() {
   const user = session?.user;
   const [activeIndex, setActiveIndex] = useState(0);
   const [meetingCode, setMeetingCode] = useState("");
+  const [joinError, setJoinError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [upcomingMeetings, setUpcomingMeetings] = useState<MeetingSummary[]>([]);
+  const [loadingMeetings, setLoadingMeetings] = useState(false);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -173,12 +178,57 @@ export default function Home() {
     };
   }, [menuOpen]);
 
+  useEffect(() => {
+    if (!user) {
+      setUpcomingMeetings([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadMeetings = async () => {
+      setLoadingMeetings(true);
+
+      try {
+        const response = await fetch("/api/meetings?limit=3");
+
+        if (!response.ok) {
+          return;
+        }
+
+        const data = (await response.json()) as { meetings?: MeetingSummary[] };
+
+        if (!cancelled) {
+          setUpcomingMeetings(data.meetings || []);
+        }
+      } finally {
+        if (!cancelled) {
+          setLoadingMeetings(false);
+        }
+      }
+    };
+
+    void loadMeetings();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
   const handleJoin = () => {
     if (!meetingCode.trim()) {
       return;
     }
 
-    router.push(`/meeting?code=${encodeURIComponent(meetingCode.trim())}`);
+    const normalizedCode = extractMeetingCode(meetingCode);
+
+    if (!normalizedCode) {
+      setJoinError("Enter a valid meeting code or full MeetFlow meeting link.");
+      return;
+    }
+
+    setJoinError(null);
+    router.push(buildMeetingJoinPath(normalizedCode));
   };
 
   return (
@@ -222,7 +272,12 @@ export default function Home() {
               <input
                 type="text"
                 value={meetingCode}
-                onChange={(event) => setMeetingCode(event.target.value)}
+                onChange={(event) => {
+                  setMeetingCode(event.target.value);
+                  if (joinError) {
+                    setJoinError(null);
+                  }
+                }}
                 placeholder="Enter a code or link"
                 aria-label="Enter a code or link"
                 className="ml-3 w-full border-0 bg-transparent text-[16px] text-[#202124] outline-none placeholder:text-[#5f6368]"
@@ -238,6 +293,73 @@ export default function Home() {
               Join
             </button>
           </div>
+
+          {joinError ? <p className="mt-3 text-sm text-[#d93025]">{joinError}</p> : null}
+
+          {user ? (
+            <section className="mt-10 rounded-[28px] border border-[#e8eaed] bg-white p-5 shadow-[0_12px_32px_rgba(60,64,67,0.08)]">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                  <p className="text-sm font-medium uppercase tracking-[0.12em] text-[#1a73e8]">
+                    Upcoming meetings
+                  </p>
+                  <h2 className="mt-2 text-[24px] font-normal text-[#202124]">
+                    Pick up where you left off
+                  </h2>
+                </div>
+                <Link
+                  href="/meetings"
+                  className="text-sm font-medium text-[#1a73e8] hover:underline"
+                >
+                  Open meeting dashboard
+                </Link>
+              </div>
+
+              <div className="mt-5 grid gap-4 lg:grid-cols-3">
+                {loadingMeetings ? (
+                  <div className="rounded-3xl bg-[#f8fafd] px-5 py-5 text-sm text-[#5f6368]">
+                    Loading your meetings…
+                  </div>
+                ) : upcomingMeetings.length === 0 ? (
+                  <div className="rounded-3xl bg-[#f8fafd] px-5 py-5 text-sm leading-6 text-[#5f6368] lg:col-span-3">
+                    No meetings scheduled yet. Use <span className="font-medium text-[#202124]">New meeting</span>{" "}
+                    to create one for later or start an instant room.
+                  </div>
+                ) : (
+                  upcomingMeetings.map((meeting) => (
+                    <article
+                      key={meeting.id}
+                      className="rounded-3xl bg-[#f8fafd] px-5 py-5"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <p className="text-lg font-medium text-[#202124]">{meeting.title}</p>
+                        <span className="rounded-full bg-white px-3 py-1 text-xs font-medium text-[#5f6368]">
+                          {meeting.relation === "HOST" ? "Host" : "Invited"}
+                        </span>
+                      </div>
+                      <p className="mt-3 text-sm leading-6 text-[#5f6368]">
+                        {formatMeetingSchedule(meeting.startTime, meeting.endTime)}
+                      </p>
+                      <div className="mt-5 flex flex-wrap gap-3">
+                        <Link
+                          href={`/meetings/${meeting.id}`}
+                          className="inline-flex h-10 items-center rounded-full border border-[#dadce0] px-4 text-sm font-medium text-[#202124] transition hover:bg-white"
+                        >
+                          Manage
+                        </Link>
+                        <Link
+                          href={buildMeetingJoinPath(meeting.meetingCode)}
+                          className="inline-flex h-10 items-center rounded-full bg-[#1a73e8] px-4 text-sm font-medium text-white transition hover:bg-[#1765cc]"
+                        >
+                          Join room
+                        </Link>
+                      </div>
+                    </article>
+                  ))
+                )}
+              </div>
+            </section>
+          ) : null}
 
           <div className="mt-12 border-t border-[#dadce0] pt-10 text-[14px] leading-6 text-[#5f6368]">
             <Link href="/" className="font-medium text-[#1a73e8] hover:underline">
