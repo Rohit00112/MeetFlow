@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import { getInitials, resolveAvatar } from "@/lib/avatar";
 import { buildMeetingRoomPath, formatMeetingSchedule } from "@/lib/meetings";
+import { createMeetingRoomParams, prejoinStorageKeys } from "@/lib/prejoin";
 import type { MeetingDetail } from "@/lib/types/meetings";
 
 type MediaPermissionState = "idle" | "granted" | "denied" | "unsupported";
@@ -16,13 +17,6 @@ interface MeetingPrejoinClientProps {
   meeting: MeetingDetail | null;
   viewerName?: string | null;
 }
-
-const storageKeys = {
-  cameraEnabled: "meetflow.prejoin.camera.enabled",
-  microphoneEnabled: "meetflow.prejoin.microphone.enabled",
-  cameraId: "meetflow.prejoin.camera.deviceId",
-  microphoneId: "meetflow.prejoin.microphone.deviceId",
-};
 
 function DeviceSelect({
   label,
@@ -134,7 +128,7 @@ export default function MeetingPrejoinClient({
   const attendeePreview = meeting?.attendees.slice(0, 4) || [];
   const participantCount = (meeting?.attendeeCount || 0) + 1;
   const setupLabel = meeting ? "Ready to join?" : "Check your setup";
-  const joinLabel = meeting ? "Join now" : meetingCode ? "Join anyway" : "Enter a meeting code";
+  const joinLabel = meeting ? "Join now" : meetingCode ? "Meeting not found" : "Enter a meeting code";
   const previewName = viewerName || "You";
   const hostName = meeting?.host.name || "MeetFlow host";
   const hostAvatar = meeting ? resolveAvatar(meeting.host) : resolveAvatar({ name: hostName });
@@ -363,10 +357,10 @@ export default function MeetingPrejoinClient({
   ]);
 
   useEffect(() => {
-    const savedCameraEnabled = window.localStorage.getItem(storageKeys.cameraEnabled);
-    const savedMicrophoneEnabled = window.localStorage.getItem(storageKeys.microphoneEnabled);
-    const savedCameraId = window.localStorage.getItem(storageKeys.cameraId);
-    const savedMicrophoneId = window.localStorage.getItem(storageKeys.microphoneId);
+    const savedCameraEnabled = window.localStorage.getItem(prejoinStorageKeys.cameraEnabled);
+    const savedMicrophoneEnabled = window.localStorage.getItem(prejoinStorageKeys.microphoneEnabled);
+    const savedCameraId = window.localStorage.getItem(prejoinStorageKeys.cameraId);
+    const savedMicrophoneId = window.localStorage.getItem(prejoinStorageKeys.microphoneId);
 
     if (savedCameraEnabled !== null) {
       setCameraEnabled(savedCameraEnabled === "true");
@@ -392,10 +386,10 @@ export default function MeetingPrejoinClient({
       return;
     }
 
-    window.localStorage.setItem(storageKeys.cameraEnabled, String(cameraEnabled));
-    window.localStorage.setItem(storageKeys.microphoneEnabled, String(microphoneEnabled));
-    window.localStorage.setItem(storageKeys.cameraId, selectedCameraId);
-    window.localStorage.setItem(storageKeys.microphoneId, selectedMicrophoneId);
+    window.localStorage.setItem(prejoinStorageKeys.cameraEnabled, String(cameraEnabled));
+    window.localStorage.setItem(prejoinStorageKeys.microphoneEnabled, String(microphoneEnabled));
+    window.localStorage.setItem(prejoinStorageKeys.cameraId, selectedCameraId);
+    window.localStorage.setItem(prejoinStorageKeys.microphoneId, selectedMicrophoneId);
   }, [
     cameraEnabled,
     microphoneEnabled,
@@ -646,8 +640,22 @@ export default function MeetingPrejoinClient({
                 <div className="mt-5 space-y-3">
                   <button
                     type="button"
-                    disabled={!meetingCode}
-                    onClick={() => meetingCode && router.push(buildMeetingRoomPath(meetingCode))}
+                    disabled={!meetingCode || !meeting}
+                    onClick={() =>
+                      meetingCode &&
+                      meeting &&
+                      router.push(
+                        buildMeetingRoomPath(
+                          meetingCode,
+                          createMeetingRoomParams({
+                            cameraEnabled,
+                            microphoneEnabled,
+                            selectedCameraId,
+                            selectedMicrophoneId,
+                          }),
+                        ),
+                      )
+                    }
                     className="inline-flex h-12 w-full items-center justify-center rounded-full bg-[#1a73e8] px-6 text-sm font-medium text-white transition hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:bg-[#d2e3fc] disabled:text-[#5f6368]"
                   >
                     {joinLabel}

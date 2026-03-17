@@ -22,7 +22,10 @@ const MeetingPage = async ({ searchParams }: MeetingPageProps) => {
 
   const meetingCode = code ? extractMeetingCode(code) : null;
   const meetingRecord = meetingCode
-    ? await getMeetingRoomRecord(meetingCode)
+    ? await getMeetingRoomRecord(meetingCode, {
+        id: session.user.id,
+        email: session.user.email,
+      })
     : null;
   const meeting = meetingRecord
     ? serializeMeetingRoomRecord(meetingRecord, {

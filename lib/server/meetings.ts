@@ -37,9 +37,48 @@ export type MeetingRoomRecord = Prisma.MeetingGetPayload<{
   include: typeof meetingRoomInclude;
 }>;
 
-export async function getMeetingRoomRecord(meetingCode: string) {
-  return prisma.meeting.findUnique({
-    where: { meetingLink: meetingCode },
+function createViewerAccessFilter(viewer?: {
+  id?: string | null;
+  email?: string | null;
+}) {
+  const accessFilters: Prisma.MeetingWhereInput[] = [];
+
+  if (viewer?.id) {
+    accessFilters.push({ createdBy: viewer.id });
+    accessFilters.push({
+      attendees: {
+        some: {
+          OR: [{ userId: viewer.id }, ...(viewer.email ? [{ email: viewer.email }] : [])],
+        },
+      },
+    });
+  } else if (viewer?.email) {
+    accessFilters.push({
+      attendees: {
+        some: {
+          email: viewer.email,
+        },
+      },
+    });
+  }
+
+  return accessFilters;
+}
+
+export async function getMeetingRoomRecord(
+  meetingCode: string,
+  viewer?: {
+    id?: string | null;
+    email?: string | null;
+  },
+) {
+  const accessFilters = createViewerAccessFilter(viewer);
+
+  return prisma.meeting.findFirst({
+    where: {
+      meetingLink: meetingCode,
+      ...(accessFilters.length > 0 ? { OR: accessFilters } : {}),
+    },
     include: meetingRoomInclude,
   });
 }

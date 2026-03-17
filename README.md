@@ -18,7 +18,7 @@ Start the development server:
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
+docker compose up -d postgres redis livekit
 pnpm prisma migrate deploy
 pnpm dev
 ```
@@ -27,6 +27,7 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 `DATABASE_URL` in `.env` is for running the Next.js app on your host machine.
 `DOCKER_DATABASE_URL` is used only by the `web` container inside Docker Compose.
+`NEXT_PUBLIC_LIVEKIT_URL` must point to the browser-reachable LiveKit WebSocket endpoint for the room join flow.
 
 To enable Google OAuth sign-in locally, set `AUTH_GOOGLE_ID` and `AUTH_GOOGLE_SECRET` in `.env`.
 The forgot-password flow returns the reset link directly in development so you can complete it without an email service.
