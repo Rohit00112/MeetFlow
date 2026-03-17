@@ -7,6 +7,7 @@ import {
   isTrackReference,
   LiveKitRoom,
   RoomAudioRenderer,
+  type TrackReferenceOrPlaceholder,
   useConnectionState,
   useLocalParticipant,
   useParticipants,
@@ -16,6 +17,7 @@ import {
 import { Icon } from "@iconify/react/dist/iconify.js";
 import {
   ConnectionState,
+  type Participant,
   Track,
   type AudioCaptureOptions,
   type VideoCaptureOptions,
@@ -59,6 +61,149 @@ function buildMediaFailureMessage(kind?: MediaDeviceKind) {
   return "A media device failed to start when joining the room.";
 }
 
+function getGridColumnsClass(tileCount: number) {
+  if (tileCount <= 1) {
+    return "grid-cols-1";
+  }
+
+  if (tileCount === 2) {
+    return "sm:grid-cols-2";
+  }
+
+  if (tileCount <= 4) {
+    return "sm:grid-cols-2";
+  }
+
+  if (tileCount <= 6) {
+    return "sm:grid-cols-2 xl:grid-cols-3";
+  }
+
+  return "sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4";
+}
+
+function formatParticipantLabel(participant: Participant, viewerName?: string | null) {
+  if (participant.isLocal) {
+    return viewerName || participant.name || "You";
+  }
+
+  return participant.name || participant.identity;
+}
+
+function sortGridTracks(
+  tracks: TrackReferenceOrPlaceholder[],
+  viewerName?: string | null,
+) {
+  return [...tracks].sort((left, right) => {
+    if (left.participant.isLocal !== right.participant.isLocal) {
+      return left.participant.isLocal ? 1 : -1;
+    }
+
+    if (left.participant.isSpeaking !== right.participant.isSpeaking) {
+      return left.participant.isSpeaking ? -1 : 1;
+    }
+
+    if (left.participant.isCameraEnabled !== right.participant.isCameraEnabled) {
+      return left.participant.isCameraEnabled ? -1 : 1;
+    }
+
+    return formatParticipantLabel(left.participant, viewerName).localeCompare(
+      formatParticipantLabel(right.participant, viewerName),
+    );
+  });
+}
+
+function MeetingParticipantTile({
+  trackRef,
+  viewerName,
+}: {
+  trackRef: TrackReferenceOrPlaceholder;
+  viewerName?: string | null;
+}) {
+  const participant = trackRef.participant;
+  const displayName = formatParticipantLabel(participant, viewerName);
+  const hasVideo = isTrackReference(trackRef);
+
+  return (
+    <article
+      className={`group relative overflow-hidden rounded-[24px] border transition ${
+        participant.isSpeaking
+          ? "border-[#8ab4f8] shadow-[0_0_0_1px_rgba(138,180,248,0.75)]"
+          : "border-white/10"
+      } bg-[#2a2b2f]`}
+    >
+      <div className="relative aspect-video">
+        {hasVideo ? (
+          <VideoTrack
+            trackRef={trackRef}
+            className={`h-full w-full object-cover ${participant.isLocal ? "[transform:scaleX(-1)]" : ""}`}
+          />
+        ) : (
+          <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_top,#3b3d42_0,#292a2d_58%,#202124_100%)] px-6 text-center text-white">
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-medium">
+              {getInitials(displayName)}
+            </div>
+            <p className="mt-4 text-[22px] font-normal">{displayName}</p>
+            <p className="mt-2 text-sm text-white/65">
+              {participant.isCameraEnabled
+                ? "Waiting for video"
+                : participant.isLocal
+                  ? "Your camera is off"
+                  : "Camera is off"}
+            </p>
+          </div>
+        )}
+
+        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between bg-gradient-to-t from-black/75 via-black/25 to-transparent px-4 pb-4 pt-16">
+          <div className="min-w-0">
+            <div className="inline-flex items-center gap-2 rounded-full bg-black/35 px-3 py-1.5 text-sm font-medium text-white backdrop-blur">
+              {participant.isSpeaking ? (
+                <span className="h-2.5 w-2.5 rounded-full bg-[#34a853]" />
+              ) : null}
+              <span className="truncate">{displayName}</span>
+              {participant.isLocal ? <span className="text-white/70">(You)</span> : null}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <span
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur ${
+                participant.isMicrophoneEnabled
+                  ? "bg-black/35 text-white"
+                  : "bg-[#5f1d1a]/85 text-[#f28b82]"
+              }`}
+            >
+              <Icon
+                icon={
+                  participant.isMicrophoneEnabled
+                    ? "heroicons:microphone"
+                    : "heroicons:microphone-slash"
+                }
+                className="h-4 w-4"
+              />
+            </span>
+            <span
+              className={`inline-flex h-9 w-9 items-center justify-center rounded-full backdrop-blur ${
+                participant.isCameraEnabled
+                  ? "bg-black/35 text-white"
+                  : "bg-[#5f1d1a]/85 text-[#f28b82]"
+              }`}
+            >
+              <Icon
+                icon={
+                  participant.isCameraEnabled
+                    ? "heroicons:video-camera"
+                    : "heroicons:video-camera-slash"
+                }
+                className="h-4 w-4"
+              />
+            </span>
+          </div>
+        </div>
+      </div>
+    </article>
+  );
+}
+
 function MeetingRoomContent({
   meeting,
   viewerName,
@@ -78,13 +223,11 @@ function MeetingRoomContent({
   const connectionState = useConnectionState();
   const participants = useParticipants();
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
-  const cameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
-  const localCameraTrack = cameraTracks.find((trackRef) => trackRef.participant.isLocal);
-  const localCameraVideoTrack =
-    localCameraTrack && isTrackReference(localCameraTrack) ? localCameraTrack : undefined;
+  const rawCameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
+  const cameraTracks = sortGridTracks(rawCameraTracks, viewerName);
   const remoteParticipants = participants.filter((participant) => !participant.isLocal);
   const connectionStatus = formatConnectionState(connectionState);
-  const hasLocalVideo = Boolean(localCameraVideoTrack) && isCameraEnabled;
+  const liveTileCount = Math.max(cameraTracks.length, 1);
 
   const leaveRoom = () => {
     startTransition(() => {
@@ -93,58 +236,89 @@ function MeetingRoomContent({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
       <div className="space-y-5">
-        <div className="relative overflow-hidden rounded-[30px] border border-[#2b2c2f] bg-[#202124] shadow-[0_24px_60px_rgba(32,33,36,0.24)]">
-          <div className="absolute left-4 top-4 z-10 flex flex-wrap items-center gap-3">
-            <span
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${connectionStatus.className}`}
-            >
-              {connectionStatus.label}
-            </span>
-            <span className="inline-flex rounded-full bg-white/12 px-3 py-1 text-xs font-medium text-white backdrop-blur">
-              Room {meeting.meetingCode}
-            </span>
+        <div className="flex flex-col gap-4 rounded-[28px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)] md:flex-row md:items-center md:justify-between">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <span
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${connectionStatus.className}`}
+              >
+                {connectionStatus.label}
+              </span>
+              <span className="inline-flex rounded-full bg-[#f1f3f4] px-3 py-1 text-xs font-medium text-[#3c4043]">
+                {participants.length} in call
+              </span>
+              <span className="inline-flex rounded-full bg-[#f1f3f4] px-3 py-1 text-xs font-medium text-[#3c4043]">
+                {meeting.meetingCode}
+              </span>
+            </div>
+            <h1 className="mt-3 truncate text-[28px] font-normal text-[#202124]">
+              {meeting.title}
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-[#5f6368]">
+              {formatMeetingSchedule(meeting.startTime, meeting.endTime)}
+            </p>
           </div>
 
-          <div className="relative aspect-video">
-            {hasLocalVideo && localCameraVideoTrack ? (
-              <VideoTrack
-                trackRef={localCameraVideoTrack}
-                className="h-full w-full object-cover [transform:scaleX(-1)]"
-              />
-            ) : (
-              <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_top,#2f3133_0,#202124_58%,#17181a_100%)] px-6 text-center text-white">
-                <div className="flex h-28 w-28 items-center justify-center rounded-full bg-white/10 text-3xl font-medium">
-                  {getInitials(viewerName || meeting.host.name)}
-                </div>
-                <p className="mt-5 text-[28px] font-normal">{viewerName || meeting.host.name}</p>
-                <p className="mt-2 max-w-[360px] text-sm leading-6 text-white/70">
-                  {isCameraEnabled
-                    ? "Waiting for your camera track to publish into the room."
-                    : "You joined with camera off from the prejoin setup."}
-                </p>
-              </div>
-            )}
+          <button
+            type="button"
+            onClick={leaveRoom}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#ea4335] px-5 text-sm font-medium text-white transition hover:bg-[#d93025]"
+          >
+            <Icon icon="heroicons:phone-x-mark" className="h-5 w-5" />
+            <span>Leave call</span>
+          </button>
+        </div>
 
-            <div className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white backdrop-blur">
-              <Icon
-                icon={isMicrophoneEnabled ? "heroicons:microphone" : "heroicons:microphone-slash"}
-                className="h-4 w-4"
-              />
-              <span>{isMicrophoneEnabled ? "Microphone live" : "Microphone muted"}</span>
+        <div className="relative overflow-hidden rounded-[30px] border border-[#2b2c2f] bg-[#202124] p-4 shadow-[0_24px_60px_rgba(32,33,36,0.24)] sm:p-5">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,#303236_0,#202124_58%,#17181a_100%)]" />
+          <div className="relative">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-1">
+              <p className="text-sm font-medium text-white/80">
+                Participant grid
+              </p>
+              <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
+                <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
+                  {liveTileCount} tile{liveTileCount === 1 ? "" : "s"}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
+                  {isMicrophoneEnabled ? "Mic on" : "Mic off"}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
+                  {isCameraEnabled ? "Camera on" : "Camera off"}
+                </span>
+              </div>
             </div>
 
-            <div className="absolute bottom-4 right-4 inline-flex items-center gap-2 rounded-full bg-black/45 px-3 py-2 text-xs font-medium text-white backdrop-blur">
-              <Icon
-                icon={isCameraEnabled ? "heroicons:video-camera" : "heroicons:video-camera-slash"}
-                className="h-4 w-4"
-              />
-              <span>{isCameraEnabled ? "Camera live" : "Camera off"}</span>
+            <div className={`grid gap-4 ${getGridColumnsClass(liveTileCount)}`}>
+              {cameraTracks.length > 0 ? (
+                cameraTracks.map((trackRef) => (
+                  <MeetingParticipantTile
+                    key={`${trackRef.participant.identity}-${trackRef.source}`}
+                    trackRef={trackRef}
+                    viewerName={viewerName}
+                  />
+                ))
+              ) : (
+                <article className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#2a2b2f]">
+                  <div className="flex aspect-video items-center justify-center px-6 text-center text-white">
+                    <div>
+                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-medium">
+                        {getInitials(viewerName || meeting.host.name)}
+                      </div>
+                      <p className="mt-4 text-[22px] font-normal">{viewerName || meeting.host.name}</p>
+                      <p className="mt-2 text-sm text-white/65">
+                        Waiting for your local participant to join the room.
+                      </p>
+                    </div>
+                  </div>
+                </article>
+              )}
             </div>
 
             {tokenState.loading ? (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/45 backdrop-blur-sm">
+              <div className="absolute inset-0 flex items-center justify-center rounded-[24px] bg-black/35 backdrop-blur-sm">
                 <div className="rounded-full bg-white/12 px-4 py-2 text-sm text-white">
                   Connecting to LiveKit room
                 </div>
@@ -152,33 +326,21 @@ function MeetingRoomContent({
             ) : null}
           </div>
         </div>
+      </div>
 
+      <div className="space-y-4">
         <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="text-sm font-medium text-[#1a73e8]">Join flow is live</p>
-              <h2 className="mt-1 text-[24px] font-normal text-[#202124]">{meeting.title}</h2>
-              <p className="mt-2 text-sm leading-6 text-[#5f6368]">
-                {formatMeetingSchedule(meeting.startTime, meeting.endTime)}
-              </p>
-            </div>
+          <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
+          <p className="mt-1 text-sm text-[#5f6368]">
+            LiveKit tracks who is actually connected. This stays separate from the invite list.
+          </p>
 
-            <button
-              type="button"
-              onClick={leaveRoom}
-              className="inline-flex h-12 items-center gap-2 rounded-full bg-[#ea4335] px-5 text-sm font-medium text-white transition hover:bg-[#d93025]"
-            >
-              <Icon icon="heroicons:phone-x-mark" className="h-5 w-5" />
-              <span>Leave call</span>
-            </button>
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
             <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
                 Connected now
               </p>
-              <p className="mt-1 text-xl font-medium text-[#202124]">{participants.length}</p>
+              <p className="mt-1 text-2xl font-medium text-[#202124]">{participants.length}</p>
             </div>
             <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
@@ -192,13 +354,17 @@ function MeetingRoomContent({
               <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
                 Invitees
               </p>
-              <p className="mt-1 text-xl font-medium text-[#202124]">{meeting.attendeeCount}</p>
+              <p className="mt-1 text-2xl font-medium text-[#202124]">{meeting.attendeeCount}</p>
+            </div>
+            <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                Remote participants
+              </p>
+              <p className="mt-1 text-2xl font-medium text-[#202124]">
+                {remoteParticipants.length}
+              </p>
             </div>
           </div>
-
-          {meeting.description ? (
-            <p className="mt-5 text-sm leading-6 text-[#5f6368]">{meeting.description}</p>
-          ) : null}
 
           {tokenState.error ? (
             <div className="mt-5 rounded-[22px] border border-[#f6c7c3] bg-[#fef7f6] px-4 py-3 text-sm leading-6 text-[#b3261e]">
@@ -211,17 +377,11 @@ function MeetingRoomContent({
               {mediaFailure}
             </div>
           ) : null}
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
-          <h3 className="text-lg font-medium text-[#202124]">Live participants</h3>
-          <p className="mt-1 text-sm text-[#5f6368]">
-            This list reflects who is currently connected to the LiveKit room.
-          </p>
 
           <div className="mt-5 space-y-3">
+            <h4 className="text-sm font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+              Present now
+            </h4>
             <div className="flex items-center justify-between gap-3 rounded-[20px] bg-[#f8fafd] px-4 py-3">
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium text-[#202124]">
@@ -235,7 +395,6 @@ function MeetingRoomContent({
                 You
               </span>
             </div>
-
             {remoteParticipants.length > 0 ? (
               remoteParticipants.map((participant) => (
                 <div
@@ -247,7 +406,7 @@ function MeetingRoomContent({
                       {participant.name || participant.identity}
                     </p>
                     <p className="truncate text-xs uppercase tracking-[0.12em] text-[#5f6368]">
-                      LiveKit connected
+                      {participant.isCameraEnabled ? "Camera live" : "Camera off"}
                     </p>
                   </div>
                   <span className="rounded-full bg-[#e8f0fe] px-3 py-1 text-xs font-medium text-[#174ea6]">
@@ -257,8 +416,8 @@ function MeetingRoomContent({
               ))
             ) : (
               <div className="rounded-[20px] border border-dashed border-[#dadce0] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                No one else is connected yet. As other participants join, they&apos;ll appear here
-                immediately.
+                No one else is connected yet. As other participants join, new tiles appear in the
+                grid immediately.
               </div>
             )}
           </div>
@@ -287,9 +446,13 @@ function MeetingRoomContent({
             ) : null}
           </div>
 
+          {meeting.description ? (
+            <p className="mt-5 text-sm leading-6 text-[#5f6368]">{meeting.description}</p>
+          ) : null}
+
           <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-            The room is now using real LiveKit authentication and connection state. The dedicated
-            in-call video grid and media controls land in the next slices.
+            The grid now reflects active room participants and camera state. Interactive media
+            controls land in the next slice.
           </div>
         </div>
       </div>
