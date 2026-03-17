@@ -17,6 +17,10 @@ export function buildMeetingJoinPath(code: string) {
   return `/meeting?code=${encodeURIComponent(code)}`;
 }
 
+export function buildMeetingRoomPath(code: string) {
+  return `/meeting/room?code=${encodeURIComponent(code)}`;
+}
+
 export function buildMeetingShareUrl(code: string, origin: string) {
   return `${origin}${buildMeetingJoinPath(code)}`;
 }
