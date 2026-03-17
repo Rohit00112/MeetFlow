@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import Navbar from "@/components/Navbar";
-import MeetingRoomPlaceholder from "@/components/meetings/MeetingRoomPlaceholder";
+import MeetingRoomClient from "@/components/meetings/MeetingRoomClient";
 import { extractMeetingCode } from "@/lib/meetings";
 import { getMeetingRoomRecord, serializeMeetingRoomRecord } from "@/lib/server/meetings";
 import { redirect } from "next/navigation";
@@ -21,7 +21,12 @@ export default async function MeetingRoomPage({ searchParams }: MeetingRoomPageP
   }
 
   const meetingCode = code ? extractMeetingCode(code) : null;
-  const meetingRecord = meetingCode ? await getMeetingRoomRecord(meetingCode) : null;
+  const meetingRecord = meetingCode
+    ? await getMeetingRoomRecord(meetingCode, {
+        id: session.user.id,
+        email: session.user.email,
+      })
+    : null;
   const meeting = meetingRecord
     ? serializeMeetingRoomRecord(meetingRecord, {
         id: session.user.id,
@@ -32,7 +37,7 @@ export default async function MeetingRoomPage({ searchParams }: MeetingRoomPageP
   return (
     <>
       <Navbar />
-      <MeetingRoomPlaceholder
+      <MeetingRoomClient
         meetingCode={meetingCode}
         meeting={meeting}
         viewerName={session.user.name}

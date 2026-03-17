@@ -17,8 +17,19 @@ export function buildMeetingJoinPath(code: string) {
   return `/meeting?code=${encodeURIComponent(code)}`;
 }
 
-export function buildMeetingRoomPath(code: string) {
-  return `/meeting/room?code=${encodeURIComponent(code)}`;
+export function buildMeetingRoomPath(
+  code: string,
+  extraParams?: Record<string, string | null | undefined>,
+) {
+  const params = new URLSearchParams({ code });
+
+  for (const [key, value] of Object.entries(extraParams || {})) {
+    if (typeof value === "string" && value.length > 0) {
+      params.set(key, value);
+    }
+  }
+
+  return `/meeting/room?${params.toString()}`;
 }
 
 export function buildMeetingShareUrl(code: string, origin: string) {

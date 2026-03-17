@@ -17,8 +17,12 @@
   },
   "dependencies": {
     "@auth/prisma-adapter": "^2.11.1",
+    "@livekit/components-react": "^2.9.20",
+    "@livekit/components-styles": "^1.2.0",
     "@prisma/client": "^6.19.2",
     "@reduxjs/toolkit": "^2.7.0",
+    "livekit-client": "^2.17.3",
+    "livekit-server-sdk": "^2.15.0",
     "next": "15.1.2",
     "next-auth": "5.0.0-beta.30",
     "react": "^19.0.0",
