@@ -11,6 +11,7 @@ import {
   useConnectionState,
   useLocalParticipant,
   useParticipants,
+  useRoomContext,
   useTracks,
   VideoTrack,
 } from "@livekit/components-react";
@@ -204,6 +205,47 @@ function MeetingParticipantTile({
   );
 }
 
+function MeetingMediaControlButton({
+  active,
+  busy,
+  disabled,
+  destructive,
+  icon,
+  label,
+  activeLabel,
+  inactiveLabel,
+  onClick,
+}: {
+  active?: boolean;
+  busy?: boolean;
+  disabled?: boolean;
+  destructive?: boolean;
+  icon: string;
+  label: string;
+  activeLabel: string;
+  inactiveLabel: string;
+  onClick: () => void;
+}) {
+  const backgroundClass = destructive
+    ? "bg-[#ea4335] text-white hover:bg-[#d93025]"
+    : active
+      ? "bg-[#3c4043] text-white hover:bg-[#4a4d52]"
+      : "bg-[#5f1d1a] text-[#f28b82] hover:bg-[#70231f]";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled || busy}
+      className={`inline-flex min-w-[128px] items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition disabled:cursor-not-allowed disabled:opacity-60 ${backgroundClass}`}
+      title={active ? activeLabel : inactiveLabel}
+    >
+      <Icon icon={icon} className={`h-5 w-5 ${busy ? "animate-pulse" : ""}`} />
+      <span>{busy ? `${label}...` : label}</span>
+    </button>
+  );
+}
+
 function MeetingRoomContent({
   meeting,
   viewerName,
@@ -220,6 +262,7 @@ function MeetingRoomContent({
   mediaFailure: string | null;
 }) {
   const router = useRouter();
+  const room = useRoomContext();
   const connectionState = useConnectionState();
   const participants = useParticipants();
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
@@ -228,11 +271,52 @@ function MeetingRoomContent({
   const remoteParticipants = participants.filter((participant) => !participant.isLocal);
   const connectionStatus = formatConnectionState(connectionState);
   const liveTileCount = Math.max(cameraTracks.length, 1);
+  const controlsReady = connectionState === ConnectionState.Connected;
+  const [pendingControl, setPendingControl] = useState<"microphone" | "camera" | null>(null);
+  const [controlError, setControlError] = useState<string | null>(null);
 
-  const leaveRoom = () => {
+  const leaveRoom = async () => {
+    try {
+      await room.disconnect();
+    } catch {
+      // Navigation still returns the user to the prejoin screen even if disconnect throws.
+    }
+
     startTransition(() => {
       router.push(buildMeetingJoinPath(meeting.meetingCode));
     });
+  };
+
+  const toggleMicrophone = async () => {
+    if (!controlsReady || pendingControl) {
+      return;
+    }
+
+    try {
+      setPendingControl("microphone");
+      setControlError(null);
+      await localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled);
+    } catch {
+      setControlError("We couldn't update your microphone state.");
+    } finally {
+      setPendingControl(null);
+    }
+  };
+
+  const toggleCamera = async () => {
+    if (!controlsReady || pendingControl) {
+      return;
+    }
+
+    try {
+      setPendingControl("camera");
+      setControlError(null);
+      await localParticipant.setCameraEnabled(!isCameraEnabled);
+    } catch {
+      setControlError("We couldn't update your camera state.");
+    } finally {
+      setPendingControl(null);
+    }
   };
 
   return (
@@ -261,14 +345,9 @@ function MeetingRoomContent({
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={leaveRoom}
-            className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#ea4335] px-5 text-sm font-medium text-white transition hover:bg-[#d93025]"
-          >
-            <Icon icon="heroicons:phone-x-mark" className="h-5 w-5" />
-            <span>Leave call</span>
-          </button>
+          <div className="rounded-full bg-[#f8fafd] px-4 py-2 text-sm font-medium text-[#5f6368]">
+            {controlsReady ? "Controls are live" : "Waiting for room connection"}
+          </div>
         </div>
 
         <div className="relative overflow-hidden rounded-[30px] border border-[#2b2c2f] bg-[#202124] p-4 shadow-[0_24px_60px_rgba(32,33,36,0.24)] sm:p-5">
@@ -324,6 +403,51 @@ function MeetingRoomContent({
                 </div>
               </div>
             ) : null}
+          </div>
+        </div>
+
+        <div className="flex flex-col items-center gap-3">
+          {controlError ? (
+            <div className="w-full max-w-[540px] rounded-[22px] border border-[#f6c7c3] bg-[#fef7f6] px-4 py-3 text-sm leading-6 text-[#b3261e]">
+              {controlError}
+            </div>
+          ) : null}
+
+          <div className="inline-flex flex-wrap items-center justify-center gap-3 rounded-full bg-[#202124] px-4 py-3 shadow-[0_18px_44px_rgba(32,33,36,0.28)]">
+            <MeetingMediaControlButton
+              active={isMicrophoneEnabled}
+              busy={pendingControl === "microphone"}
+              disabled={!controlsReady}
+              icon={isMicrophoneEnabled ? "heroicons:microphone" : "heroicons:microphone-slash"}
+              label={isMicrophoneEnabled ? "Mute" : "Unmute"}
+              activeLabel="Mute microphone"
+              inactiveLabel="Unmute microphone"
+              onClick={() => {
+                void toggleMicrophone();
+              }}
+            />
+            <MeetingMediaControlButton
+              active={isCameraEnabled}
+              busy={pendingControl === "camera"}
+              disabled={!controlsReady}
+              icon={isCameraEnabled ? "heroicons:video-camera" : "heroicons:video-camera-slash"}
+              label={isCameraEnabled ? "Turn off camera" : "Turn on camera"}
+              activeLabel="Turn off camera"
+              inactiveLabel="Turn on camera"
+              onClick={() => {
+                void toggleCamera();
+              }}
+            />
+            <MeetingMediaControlButton
+              destructive
+              icon="heroicons:phone-x-mark"
+              label="Leave call"
+              activeLabel="Leave call"
+              inactiveLabel="Leave call"
+              onClick={() => {
+                void leaveRoom();
+              }}
+            />
           </div>
         </div>
       </div>
@@ -451,8 +575,8 @@ function MeetingRoomContent({
           ) : null}
 
           <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-            The grid now reflects active room participants and camera state. Interactive media
-            controls land in the next slice.
+            Use the floating toolbar to mute, turn your camera on or off, and leave the call
+            without losing the meeting context.
           </div>
         </div>
       </div>
