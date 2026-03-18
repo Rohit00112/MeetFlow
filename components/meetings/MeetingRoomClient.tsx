@@ -27,7 +27,7 @@ import { getInitials } from "@/lib/avatar";
 import { buildMeetingJoinPath, formatMeetingSchedule } from "@/lib/meetings";
 import { parseMeetingRoomPreferences } from "@/lib/prejoin";
 import type { LiveKitJoinTokenResponse } from "@/lib/types/livekit";
-import type { MeetingDetail } from "@/lib/types/meetings";
+import type { MeetingAttendeeSummary, MeetingDetail } from "@/lib/types/meetings";
 
 interface MeetingRoomClientProps {
   meetingCode: string | null;
@@ -111,6 +111,59 @@ function sortGridTracks(
       formatParticipantLabel(right.participant, viewerName),
     );
   });
+}
+
+function sortLiveParticipants(participants: Participant[], viewerName?: string | null) {
+  return [...participants].sort((left, right) => {
+    if (left.isLocal !== right.isLocal) {
+      return left.isLocal ? -1 : 1;
+    }
+
+    if (left.isSpeaking !== right.isSpeaking) {
+      return left.isSpeaking ? -1 : 1;
+    }
+
+    if (left.isCameraEnabled !== right.isCameraEnabled) {
+      return left.isCameraEnabled ? -1 : 1;
+    }
+
+    return formatParticipantLabel(left, viewerName).localeCompare(
+      formatParticipantLabel(right, viewerName),
+    );
+  });
+}
+
+function participantMatchesUserId(participant: Participant, userId?: string | null) {
+  return Boolean(userId && participant.identity.includes(userId));
+}
+
+function formatAttendeeLabel(attendee: MeetingAttendeeSummary) {
+  return attendee.user?.name || attendee.name || attendee.email;
+}
+
+function getAttendeeStatusPresentation(status: MeetingAttendeeSummary["status"]) {
+  switch (status) {
+    case "ACCEPTED":
+      return {
+        label: "Accepted",
+        className: "bg-[#e6f4ea] text-[#137333]",
+      };
+    case "DECLINED":
+      return {
+        label: "Declined",
+        className: "bg-[#fce8e6] text-[#b3261e]",
+      };
+    case "TENTATIVE":
+      return {
+        label: "Tentative",
+        className: "bg-[#fef7e0] text-[#b06000]",
+      };
+    default:
+      return {
+        label: "Invited",
+        className: "bg-[#e8f0fe] text-[#174ea6]",
+      };
+  }
 }
 
 function MeetingParticipantTile({
@@ -246,6 +299,164 @@ function MeetingMediaControlButton({
   );
 }
 
+function MeetingPanelToggleButton({
+  active,
+  count,
+  onClick,
+}: {
+  active: boolean;
+  count: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex min-w-[128px] items-center justify-center gap-2 rounded-full px-4 py-3 text-sm font-medium transition ${
+        active
+          ? "bg-[#1a73e8] text-white hover:bg-[#1765cc]"
+          : "bg-[#3c4043] text-white hover:bg-[#4a4d52]"
+      }`}
+      title={active ? "Hide people panel" : "Show people panel"}
+    >
+      <Icon icon="heroicons:users" className="h-5 w-5" />
+      <span>{active ? "Hide people" : "People"}</span>
+      <span
+        className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
+          active ? "bg-white/20 text-white" : "bg-white/10 text-white/90"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+function MeetingRoomStatusNotices({
+  tokenError,
+  mediaFailure,
+}: {
+  tokenError: string | null;
+  mediaFailure: string | null;
+}) {
+  return (
+    <>
+      {tokenError ? (
+        <div className="rounded-[22px] border border-[#f6c7c3] bg-[#fef7f6] px-4 py-3 text-sm leading-6 text-[#b3261e]">
+          {tokenError}
+        </div>
+      ) : null}
+
+      {mediaFailure ? (
+        <div className="rounded-[22px] border border-[#fde293] bg-[#fff8e1] px-4 py-3 text-sm leading-6 text-[#8a5800]">
+          {mediaFailure}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function MeetingLiveParticipantPanelRow({
+  participant,
+  hostUserId,
+  viewerName,
+}: {
+  participant: Participant;
+  hostUserId: string;
+  viewerName?: string | null;
+}) {
+  const displayName = formatParticipantLabel(participant, viewerName);
+  const isHost = participantMatchesUserId(participant, hostUserId);
+
+  return (
+    <div className="flex items-center gap-3 rounded-[22px] bg-[#f8fafd] px-4 py-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#d2e3fc] text-sm font-medium text-[#174ea6]">
+        {getInitials(displayName)}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[#202124]">{displayName}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-[#5f6368]">
+          {participant.isLocal ? (
+            <span className="rounded-full bg-[#e6f4ea] px-2.5 py-1 font-medium text-[#137333]">
+              You
+            </span>
+          ) : null}
+          {isHost ? (
+            <span className="rounded-full bg-[#e8f0fe] px-2.5 py-1 font-medium text-[#174ea6]">
+              Host
+            </span>
+          ) : null}
+          {participant.isSpeaking ? (
+            <span className="rounded-full bg-[#e6f4ea] px-2.5 py-1 font-medium text-[#137333]">
+              Speaking
+            </span>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <span
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+            participant.isMicrophoneEnabled
+              ? "bg-white text-[#202124]"
+              : "bg-[#5f1d1a] text-[#f28b82]"
+          }`}
+        >
+          <Icon
+            icon={
+              participant.isMicrophoneEnabled
+                ? "heroicons:microphone"
+                : "heroicons:microphone-slash"
+            }
+            className="h-4 w-4"
+          />
+        </span>
+        <span
+          className={`inline-flex h-9 w-9 items-center justify-center rounded-full ${
+            participant.isCameraEnabled ? "bg-white text-[#202124]" : "bg-[#5f1d1a] text-[#f28b82]"
+          }`}
+        >
+          <Icon
+            icon={
+              participant.isCameraEnabled
+                ? "heroicons:video-camera"
+                : "heroicons:video-camera-slash"
+            }
+            className="h-4 w-4"
+          />
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function MeetingInvitePanelRow({
+  attendee,
+}: {
+  attendee: MeetingAttendeeSummary;
+}) {
+  const displayName = formatAttendeeLabel(attendee);
+  const status = getAttendeeStatusPresentation(attendee.status);
+
+  return (
+    <div className="flex items-center gap-3 rounded-[22px] border border-[#eef0f1] bg-white px-4 py-3">
+      <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#f1f3f4] text-sm font-medium text-[#3c4043]">
+        {getInitials(displayName)}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-[#202124]">{displayName}</p>
+        <p className="truncate text-xs text-[#5f6368]">{attendee.email}</p>
+      </div>
+
+      <span className={`rounded-full px-3 py-1 text-xs font-medium ${status.className}`}>
+        {status.label}
+      </span>
+    </div>
+  );
+}
+
 function MeetingRoomContent({
   meeting,
   viewerName,
@@ -268,12 +479,18 @@ function MeetingRoomContent({
   const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
   const rawCameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
   const cameraTracks = sortGridTracks(rawCameraTracks, viewerName);
+  const liveParticipants = sortLiveParticipants(participants, viewerName);
   const remoteParticipants = participants.filter((participant) => !participant.isLocal);
+  const offlineInvitees = meeting.attendees.filter(
+    (attendee) =>
+      !liveParticipants.some((participant) => participantMatchesUserId(participant, attendee.user?.id)),
+  );
   const connectionStatus = formatConnectionState(connectionState);
   const liveTileCount = Math.max(cameraTracks.length, 1);
   const controlsReady = connectionState === ConnectionState.Connected;
   const [pendingControl, setPendingControl] = useState<"microphone" | "camera" | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
+  const [isParticipantPanelOpen, setIsParticipantPanelOpen] = useState(false);
 
   const leaveRoom = async () => {
     try {
@@ -320,7 +537,7 @@ function MeetingRoomContent({
   };
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
       <div className="space-y-5">
         <div className="flex flex-col gap-4 rounded-[28px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)] md:flex-row md:items-center md:justify-between">
           <div className="min-w-0">
@@ -438,6 +655,13 @@ function MeetingRoomContent({
                 void toggleCamera();
               }}
             />
+            <MeetingPanelToggleButton
+              active={isParticipantPanelOpen}
+              count={liveParticipants.length}
+              onClick={() => {
+                setIsParticipantPanelOpen((currentValue) => !currentValue);
+              }}
+            />
             <MeetingMediaControlButton
               destructive
               icon="heroicons:phone-x-mark"
@@ -453,132 +677,164 @@ function MeetingRoomContent({
       </div>
 
       <div className="space-y-4">
-        <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
-          <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
-          <p className="mt-1 text-sm text-[#5f6368]">
-            LiveKit tracks who is actually connected. This stays separate from the invite list.
-          </p>
+        <MeetingRoomStatusNotices
+          tokenError={tokenState.error}
+          mediaFailure={mediaFailure}
+        />
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+        {isParticipantPanelOpen ? (
+          <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-lg font-medium text-[#202124]">People</h3>
+                <p className="mt-1 text-sm text-[#5f6368]">
+                  See who is connected right now and who still has the invite.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsParticipantPanelOpen(false);
+                }}
+                className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f3f4] text-[#5f6368] transition hover:bg-[#e8eaed]"
+                title="Close people panel"
+              >
+                <Icon icon="heroicons:x-mark" className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                  In the call
+                </p>
+                <p className="mt-1 text-2xl font-medium text-[#202124]">{liveParticipants.length}</p>
+              </div>
+              <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                  Still invited
+                </p>
+                <p className="mt-1 text-2xl font-medium text-[#202124]">{offlineInvitees.length}</p>
+              </div>
+            </div>
+
+            <div className="mt-5 space-y-3">
+              <h4 className="text-sm font-medium uppercase tracking-[0.14em] text-[#5f6368]">
                 Connected now
-              </p>
-              <p className="mt-1 text-2xl font-medium text-[#202124]">{participants.length}</p>
-            </div>
-            <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
-                Participant identity
-              </p>
-              <p className="mt-1 truncate text-sm font-medium text-[#202124]">
-                {tokenState.participantIdentity || localParticipant.identity}
-              </p>
-            </div>
-            <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
-                Invitees
-              </p>
-              <p className="mt-1 text-2xl font-medium text-[#202124]">{meeting.attendeeCount}</p>
-            </div>
-            <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
-              <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
-                Remote participants
-              </p>
-              <p className="mt-1 text-2xl font-medium text-[#202124]">
-                {remoteParticipants.length}
-              </p>
-            </div>
-          </div>
-
-          {tokenState.error ? (
-            <div className="mt-5 rounded-[22px] border border-[#f6c7c3] bg-[#fef7f6] px-4 py-3 text-sm leading-6 text-[#b3261e]">
-              {tokenState.error}
-            </div>
-          ) : null}
-
-          {mediaFailure ? (
-            <div className="mt-5 rounded-[22px] border border-[#fde293] bg-[#fff8e1] px-4 py-3 text-sm leading-6 text-[#8a5800]">
-              {mediaFailure}
-            </div>
-          ) : null}
-
-          <div className="mt-5 space-y-3">
-            <h4 className="text-sm font-medium uppercase tracking-[0.14em] text-[#5f6368]">
-              Present now
-            </h4>
-            <div className="flex items-center justify-between gap-3 rounded-[20px] bg-[#f8fafd] px-4 py-3">
-              <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-[#202124]">
-                  {viewerName || meeting.host.name}
-                </p>
-                <p className="truncate text-xs uppercase tracking-[0.12em] text-[#5f6368]">
-                  Local participant
-                </p>
-              </div>
-              <span className="rounded-full bg-[#e6f4ea] px-3 py-1 text-xs font-medium text-[#137333]">
-                You
-              </span>
-            </div>
-            {remoteParticipants.length > 0 ? (
-              remoteParticipants.map((participant) => (
-                <div
-                  key={participant.identity}
-                  className="flex items-center justify-between gap-3 rounded-[20px] bg-[#f8fafd] px-4 py-3"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium text-[#202124]">
-                      {participant.name || participant.identity}
-                    </p>
-                    <p className="truncate text-xs uppercase tracking-[0.12em] text-[#5f6368]">
-                      {participant.isCameraEnabled ? "Camera live" : "Camera off"}
-                    </p>
-                  </div>
-                  <span className="rounded-full bg-[#e8f0fe] px-3 py-1 text-xs font-medium text-[#174ea6]">
-                    Live
-                  </span>
+              </h4>
+              {liveParticipants.length > 0 ? (
+                liveParticipants.map((participant) => (
+                  <MeetingLiveParticipantPanelRow
+                    key={participant.identity}
+                    participant={participant}
+                    hostUserId={meeting.host.id}
+                    viewerName={viewerName}
+                  />
+                ))
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-[#dadce0] px-4 py-4 text-sm leading-6 text-[#5f6368]">
+                  No one is connected yet. Join the room to start the call and populate the people
+                  panel.
                 </div>
-              ))
-            ) : (
-              <div className="rounded-[20px] border border-dashed border-[#dadce0] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                No one else is connected yet. As other participants join, new tiles appear in the
-                grid immediately.
-              </div>
-            )}
-          </div>
-        </div>
+              )}
+            </div>
 
-        <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
-          <h3 className="text-lg font-medium text-[#202124]">Meeting details</h3>
-          <div className="mt-4 space-y-3 text-sm text-[#5f6368]">
-            <p className="flex items-center gap-2">
-              <Icon icon="heroicons:link" className="h-5 w-5 text-[#1a73e8]" />
-              <span>{meeting.meetingCode}</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <Icon icon="heroicons:user-circle" className="h-5 w-5 text-[#1a73e8]" />
-              <span>{meeting.host.name} (Host)</span>
-            </p>
-            <p className="flex items-center gap-2">
-              <Icon icon="heroicons:clock" className="h-5 w-5 text-[#1a73e8]" />
-              <span>{formatMeetingSchedule(meeting.startTime, meeting.endTime)}</span>
-            </p>
-            {meeting.passcode ? (
-              <p className="flex items-center gap-2">
-                <Icon icon="heroicons:lock-closed" className="h-5 w-5 text-[#1a73e8]" />
-                <span>Passcode: {meeting.passcode}</span>
+            <div className="mt-6 space-y-3">
+              <h4 className="text-sm font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                Invited
+              </h4>
+              {offlineInvitees.length > 0 ? (
+                offlineInvitees.map((attendee) => (
+                  <MeetingInvitePanelRow key={attendee.id} attendee={attendee} />
+                ))
+              ) : (
+                <div className="rounded-[20px] border border-dashed border-[#dadce0] px-4 py-4 text-sm leading-6 text-[#5f6368]">
+                  Everyone on the invite list is already in the call, or this meeting has no extra
+                  invitees.
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
+              <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
+              <p className="mt-1 text-sm text-[#5f6368]">
+                LiveKit tracks who is actually connected. Use the People toggle for the detailed
+                roster.
               </p>
-            ) : null}
-          </div>
 
-          {meeting.description ? (
-            <p className="mt-5 text-sm leading-6 text-[#5f6368]">{meeting.description}</p>
-          ) : null}
+              <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Connected now
+                  </p>
+                  <p className="mt-1 text-2xl font-medium text-[#202124]">{participants.length}</p>
+                </div>
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Participant identity
+                  </p>
+                  <p className="mt-1 truncate text-sm font-medium text-[#202124]">
+                    {tokenState.participantIdentity || localParticipant.identity}
+                  </p>
+                </div>
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Invitees
+                  </p>
+                  <p className="mt-1 text-2xl font-medium text-[#202124]">{meeting.attendeeCount}</p>
+                </div>
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Remote participants
+                  </p>
+                  <p className="mt-1 text-2xl font-medium text-[#202124]">
+                    {remoteParticipants.length}
+                  </p>
+                </div>
+              </div>
 
-          <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-            Use the floating toolbar to mute, turn your camera on or off, and leave the call
-            without losing the meeting context.
-          </div>
-        </div>
+              <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
+                Open People from the toolbar to see live participants, host badges, mic and camera
+                state, and the remaining invite list.
+              </div>
+            </div>
+
+            <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
+              <h3 className="text-lg font-medium text-[#202124]">Meeting details</h3>
+              <div className="mt-4 space-y-3 text-sm text-[#5f6368]">
+                <p className="flex items-center gap-2">
+                  <Icon icon="heroicons:link" className="h-5 w-5 text-[#1a73e8]" />
+                  <span>{meeting.meetingCode}</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Icon icon="heroicons:user-circle" className="h-5 w-5 text-[#1a73e8]" />
+                  <span>{meeting.host.name} (Host)</span>
+                </p>
+                <p className="flex items-center gap-2">
+                  <Icon icon="heroicons:clock" className="h-5 w-5 text-[#1a73e8]" />
+                  <span>{formatMeetingSchedule(meeting.startTime, meeting.endTime)}</span>
+                </p>
+                {meeting.passcode ? (
+                  <p className="flex items-center gap-2">
+                    <Icon icon="heroicons:lock-closed" className="h-5 w-5 text-[#1a73e8]" />
+                    <span>Passcode: {meeting.passcode}</span>
+                  </p>
+                ) : null}
+              </div>
+
+              {meeting.description ? (
+                <p className="mt-5 text-sm leading-6 text-[#5f6368]">{meeting.description}</p>
+              ) : null}
+
+              <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
+                Use the floating toolbar to mute, turn your camera on or off, open People, and
+                leave the call without losing the meeting context.
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
