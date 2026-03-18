@@ -270,38 +270,84 @@ function createReactionBurst({
   };
 }
 
+function getTrackReferenceId(trackRef: TrackReferenceOrPlaceholder) {
+  return `${trackRef.participant.identity}-${trackRef.source}`;
+}
+
+function isScreenShareTrack(trackRef: TrackReferenceOrPlaceholder) {
+  return trackRef.source === Track.Source.ScreenShare;
+}
+
+function formatTrackHeadline(trackRef: TrackReferenceOrPlaceholder, viewerName?: string | null) {
+  const displayName = formatParticipantLabel(trackRef.participant, viewerName);
+
+  if (isScreenShareTrack(trackRef)) {
+    return `${displayName} is presenting`;
+  }
+
+  return `${displayName} in focus`;
+}
+
 function MeetingParticipantTile({
   trackRef,
   viewerName,
+  selectable,
+  selected,
+  onSelect,
 }: {
   trackRef: TrackReferenceOrPlaceholder;
   viewerName?: string | null;
+  selectable?: boolean;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
   const participant = trackRef.participant;
   const displayName = formatParticipantLabel(participant, viewerName);
   const hasVideo = isTrackReference(trackRef);
   const isHandRaised = participantHasRaisedHand(participant);
+  const isScreenShare = isScreenShareTrack(trackRef);
 
   return (
     <article
       className={`group relative overflow-hidden rounded-[24px] border transition ${
-        participant.isSpeaking
+        selected
+          ? "border-[#8ab4f8] shadow-[0_0_0_1px_rgba(138,180,248,0.9)]"
+          : participant.isSpeaking
           ? "border-[#8ab4f8] shadow-[0_0_0_1px_rgba(138,180,248,0.75)]"
           : "border-white/10"
-      } bg-[#2a2b2f]`}
+      } bg-[#2a2b2f] ${selectable ? "cursor-pointer hover:border-white/30" : ""}`}
+      onClick={onSelect}
     >
       <div className="relative aspect-video">
-        {isHandRaised ? (
-          <div className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#fbbc04] px-3 py-1.5 text-xs font-medium text-[#202124] shadow-[0_10px_24px_rgba(251,188,4,0.28)]">
-            <Icon icon="heroicons:hand-raised" className="h-4 w-4" />
-            <span>Hand raised</span>
-          </div>
-        ) : null}
+        <div className="absolute right-4 top-4 z-10 flex flex-wrap justify-end gap-2">
+          {isScreenShare ? (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#1a73e8] px-3 py-1.5 text-xs font-medium text-white shadow-[0_10px_24px_rgba(26,115,232,0.28)]">
+              <Icon icon="heroicons:presentation-chart-line" className="h-4 w-4" />
+              <span>Presenting</span>
+            </div>
+          ) : null}
+          {isHandRaised ? (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-[#fbbc04] px-3 py-1.5 text-xs font-medium text-[#202124] shadow-[0_10px_24px_rgba(251,188,4,0.28)]">
+              <Icon icon="heroicons:hand-raised" className="h-4 w-4" />
+              <span>Hand raised</span>
+            </div>
+          ) : null}
+          {selectable ? (
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-black/45 px-3 py-1.5 text-xs font-medium text-white backdrop-blur">
+              <Icon icon="heroicons:arrows-pointing-out" className="h-4 w-4" />
+              <span>{selected ? "Focused" : "Pin"}</span>
+            </div>
+          ) : null}
+        </div>
 
         {hasVideo ? (
           <VideoTrack
             trackRef={trackRef}
-            className={`h-full w-full object-cover ${participant.isLocal ? "[transform:scaleX(-1)]" : ""}`}
+            className={`h-full w-full ${
+              isScreenShare
+                ? "bg-[#17181a] object-contain"
+                : `object-cover ${participant.isLocal ? "[transform:scaleX(-1)]" : ""}`
+            }`}
           />
         ) : (
           <div className="flex h-full flex-col items-center justify-center bg-[radial-gradient(circle_at_top,#3b3d42_0,#292a2d_58%,#202124_100%)] px-6 text-center text-white">
@@ -310,11 +356,13 @@ function MeetingParticipantTile({
             </div>
             <p className="mt-4 text-[22px] font-normal">{displayName}</p>
             <p className="mt-2 text-sm text-white/65">
-              {participant.isCameraEnabled
-                ? "Waiting for video"
-                : participant.isLocal
-                  ? "Your camera is off"
-                  : "Camera is off"}
+              {isScreenShare
+                ? "Waiting for shared content"
+                : participant.isCameraEnabled
+                  ? "Waiting for video"
+                  : participant.isLocal
+                    ? "Your camera is off"
+                    : "Camera is off"}
             </p>
           </div>
         )}
@@ -367,6 +415,41 @@ function MeetingParticipantTile({
         </div>
       </div>
     </article>
+  );
+}
+
+function MeetingFocusedTrackStage({
+  trackRef,
+  viewerName,
+  onShowGrid,
+}: {
+  trackRef: TrackReferenceOrPlaceholder;
+  viewerName?: string | null;
+  onShowGrid: () => void;
+}) {
+  const isScreenShare = isScreenShareTrack(trackRef);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-medium text-white/80">
+            {isScreenShare ? "Presented content" : "Focused participant"}
+          </p>
+          <p className="mt-1 text-sm text-white/60">{formatTrackHeadline(trackRef, viewerName)}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onShowGrid}
+          className="inline-flex items-center justify-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-medium text-white transition hover:bg-white/16"
+        >
+          <Icon icon="heroicons:squares-2x2" className="h-5 w-5" />
+          <span>Show grid</span>
+        </button>
+      </div>
+
+      <MeetingParticipantTile trackRef={trackRef} viewerName={viewerName} />
+    </div>
   );
 }
 
@@ -515,6 +598,11 @@ function MeetingLiveParticipantPanelRow({
           {participant.isSpeaking ? (
             <span className="rounded-full bg-[#e6f4ea] px-2.5 py-1 font-medium text-[#137333]">
               Speaking
+            </span>
+          ) : null}
+          {participant.isScreenShareEnabled ? (
+            <span className="rounded-full bg-[#e8f0fe] px-2.5 py-1 font-medium text-[#174ea6]">
+              Presenting
             </span>
           ) : null}
           {isHandRaised ? (
@@ -797,9 +885,13 @@ function MeetingRoomContent({
   const room = useRoomContext();
   const connectionState = useConnectionState();
   const participants = useParticipants();
-  const { localParticipant, isCameraEnabled, isMicrophoneEnabled } = useLocalParticipant();
+  const { localParticipant, isCameraEnabled, isMicrophoneEnabled, isScreenShareEnabled } =
+    useLocalParticipant();
   const rawCameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
+  const rawScreenShareTracks = useTracks([{ source: Track.Source.ScreenShare, withPlaceholder: false }]);
   const cameraTracks = sortGridTracks(rawCameraTracks, viewerName);
+  const screenShareTracks = sortGridTracks(rawScreenShareTracks, viewerName);
+  const focusableTracks = [...screenShareTracks, ...cameraTracks];
   const liveParticipants = sortLiveParticipants(participants, viewerName);
   const raisedHandParticipants = liveParticipants.filter((participant) =>
     participantHasRaisedHand(participant),
@@ -810,11 +902,13 @@ function MeetingRoomContent({
       !liveParticipants.some((participant) => participantMatchesUserId(participant, attendee.user?.id)),
   );
   const connectionStatus = formatConnectionState(connectionState);
-  const liveTileCount = Math.max(cameraTracks.length, 1);
+  const visibleTrackCount = Math.max(focusableTracks.length, 1);
   const controlsReady = connectionState === ConnectionState.Connected;
   const isHandRaised = participantHasRaisedHand(localParticipant);
   const localParticipantName = formatParticipantLabel(localParticipant, viewerName);
-  const [pendingControl, setPendingControl] = useState<"microphone" | "camera" | null>(null);
+  const [pendingControl, setPendingControl] = useState<
+    "microphone" | "camera" | "screenShare" | null
+  >(null);
   const [controlError, setControlError] = useState<string | null>(null);
   const [activeSidebar, setActiveSidebar] = useState<MeetingSidebarPanel | null>(null);
   const [chatDraft, setChatDraft] = useState("");
@@ -825,7 +919,24 @@ function MeetingRoomContent({
   const [isUpdatingHandRaise, setIsUpdatingHandRaise] = useState(false);
   const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
   const [reactionBursts, setReactionBursts] = useState<MeetingReactionBurst[]>([]);
+  const [selectedTrackId, setSelectedTrackId] = useState<string | null>(null);
+  const [dismissedAutoFocus, setDismissedAutoFocus] = useState(false);
   const reactionTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const previousScreenShareCountRef = useRef(screenShareTracks.length);
+  const hasSelectedTrack = Boolean(
+    selectedTrackId &&
+      focusableTracks.some((trackRef) => getTrackReferenceId(trackRef) === selectedTrackId),
+  );
+  const selectedFocusTrack = selectedTrackId
+    ? focusableTracks.find((trackRef) => getTrackReferenceId(trackRef) === selectedTrackId) || null
+    : null;
+  const autoFocusedTrack = dismissedAutoFocus ? null : screenShareTracks[0] || null;
+  const focusedTrack = selectedFocusTrack || autoFocusedTrack;
+  const secondaryTracks = focusedTrack
+    ? focusableTracks.filter(
+        (trackRef) => getTrackReferenceId(trackRef) !== getTrackReferenceId(focusedTrack),
+      )
+    : cameraTracks;
 
   useEffect(() => {
     const handleChatMessage = (
@@ -865,6 +976,22 @@ function MeetingRoomContent({
       setUnreadChatCount(0);
     }
   }, [activeSidebar]);
+
+  useEffect(() => {
+    const previousScreenShareCount = previousScreenShareCountRef.current;
+
+    if (screenShareTracks.length === 0 || previousScreenShareCount === 0) {
+      setDismissedAutoFocus(false);
+    }
+
+    previousScreenShareCountRef.current = screenShareTracks.length;
+  }, [screenShareTracks.length]);
+
+  useEffect(() => {
+    if (selectedTrackId && !hasSelectedTrack) {
+      setSelectedTrackId(null);
+    }
+  }, [hasSelectedTrack, selectedTrackId]);
 
   useEffect(() => {
     const reactionTimeouts = reactionTimeoutsRef.current;
@@ -992,6 +1119,25 @@ function MeetingRoomContent({
     }
   };
 
+  const toggleScreenShare = async () => {
+    if (!controlsReady || pendingControl) {
+      return;
+    }
+
+    try {
+      setPendingControl("screenShare");
+      setControlError(null);
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+      if (!isScreenShareEnabled) {
+        setDismissedAutoFocus(false);
+      }
+    } catch {
+      setControlError("We couldn't update your screen sharing state.");
+    } finally {
+      setPendingControl(null);
+    }
+  };
+
   const toggleHandRaise = async () => {
     if (!controlsReady || isUpdatingHandRaise) {
       return;
@@ -1090,17 +1236,20 @@ function MeetingRoomContent({
           <div className="relative">
             <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-1">
               <p className="text-sm font-medium text-white/80">
-                Participant grid
+                {focusedTrack ? "Focus layout" : "Participant grid"}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-white/70">
                 <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
-                  {liveTileCount} tile{liveTileCount === 1 ? "" : "s"}
+                  {visibleTrackCount} tile{visibleTrackCount === 1 ? "" : "s"}
                 </span>
                 <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
                   {isMicrophoneEnabled ? "Mic on" : "Mic off"}
                 </span>
                 <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
                   {isCameraEnabled ? "Camera on" : "Camera off"}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
+                  {screenShareTracks.length > 0 ? `${screenShareTracks.length} presenting` : "No presentation"}
                 </span>
                 {raisedHandParticipants.length > 0 ? (
                   <span className="rounded-full bg-[#fbbc04]/90 px-3 py-1 text-[#202124] backdrop-blur">
@@ -1113,31 +1262,78 @@ function MeetingRoomContent({
 
             <MeetingReactionBurstStack reactions={reactionBursts} />
 
-            <div className={`grid gap-4 ${getGridColumnsClass(liveTileCount)}`}>
-              {cameraTracks.length > 0 ? (
-                cameraTracks.map((trackRef) => (
-                  <MeetingParticipantTile
-                    key={`${trackRef.participant.identity}-${trackRef.source}`}
-                    trackRef={trackRef}
-                    viewerName={viewerName}
-                  />
-                ))
-              ) : (
-                <article className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#2a2b2f]">
-                  <div className="flex aspect-video items-center justify-center px-6 text-center text-white">
-                    <div>
-                      <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-medium">
-                        {getInitials(viewerName || meeting.host.name)}
-                      </div>
-                      <p className="mt-4 text-[22px] font-normal">{viewerName || meeting.host.name}</p>
-                      <p className="mt-2 text-sm text-white/65">
-                        Waiting for your local participant to join the room.
+            {focusedTrack ? (
+              <div className="space-y-4">
+                <MeetingFocusedTrackStage
+                  trackRef={focusedTrack}
+                  viewerName={viewerName}
+                  onShowGrid={() => {
+                    setSelectedTrackId(null);
+                    setDismissedAutoFocus(true);
+                  }}
+                />
+
+                {secondaryTracks.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <p className="text-sm font-medium text-white/80">Filmstrip</p>
+                      <p className="text-xs text-white/60">
+                        Click a tile to pin it to the main stage.
                       </p>
                     </div>
+                    <div className="flex gap-3 overflow-x-auto pb-2">
+                      {secondaryTracks.map((trackRef) => (
+                        <div
+                          key={getTrackReferenceId(trackRef)}
+                          className="w-[260px] shrink-0 sm:w-[300px]"
+                        >
+                          <MeetingParticipantTile
+                            trackRef={trackRef}
+                            viewerName={viewerName}
+                            selectable
+                            selected={false}
+                            onSelect={() => {
+                              setSelectedTrackId(getTrackReferenceId(trackRef));
+                              setDismissedAutoFocus(false);
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </article>
-              )}
-            </div>
+                ) : null}
+              </div>
+            ) : focusableTracks.length > 0 ? (
+              <div className={`grid gap-4 ${getGridColumnsClass(visibleTrackCount)}`}>
+                {focusableTracks.map((trackRef) => (
+                  <MeetingParticipantTile
+                    key={getTrackReferenceId(trackRef)}
+                    trackRef={trackRef}
+                    viewerName={viewerName}
+                    selectable
+                    selected={selectedTrackId === getTrackReferenceId(trackRef)}
+                    onSelect={() => {
+                      setSelectedTrackId(getTrackReferenceId(trackRef));
+                      setDismissedAutoFocus(false);
+                    }}
+                  />
+                ))}
+              </div>
+            ) : (
+              <article className="relative overflow-hidden rounded-[24px] border border-white/10 bg-[#2a2b2f]">
+                <div className="flex aspect-video items-center justify-center px-6 text-center text-white">
+                  <div>
+                    <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-white/10 text-2xl font-medium">
+                      {getInitials(viewerName || meeting.host.name)}
+                    </div>
+                    <p className="mt-4 text-[22px] font-normal">{viewerName || meeting.host.name}</p>
+                    <p className="mt-2 text-sm text-white/65">
+                      Waiting for your local participant to join the room.
+                    </p>
+                  </div>
+                </div>
+              </article>
+            )}
 
             {tokenState.loading ? (
               <div className="absolute inset-0 flex items-center justify-center rounded-[24px] bg-black/35 backdrop-blur-sm">
@@ -1188,6 +1384,22 @@ function MeetingRoomContent({
               inactiveLabel="Turn on camera"
               onClick={() => {
                 void toggleCamera();
+              }}
+            />
+            <MeetingMediaControlButton
+              active={isScreenShareEnabled}
+              busy={pendingControl === "screenShare"}
+              disabled={!controlsReady}
+              icon={
+                isScreenShareEnabled
+                  ? "heroicons:stop-circle"
+                  : "heroicons:presentation-chart-line"
+              }
+              label={isScreenShareEnabled ? "Stop presenting" : "Present now"}
+              activeLabel="Stop screen sharing"
+              inactiveLabel="Start screen sharing"
+              onClick={() => {
+                void toggleScreenShare();
               }}
             />
             <MeetingPanelToggleButton
@@ -1304,6 +1516,12 @@ function MeetingRoomContent({
                   {raisedHandParticipants.length}
                 </p>
               </div>
+              <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                  Presenting
+                </p>
+                <p className="mt-1 text-2xl font-medium text-[#202124]">{screenShareTracks.length}</p>
+              </div>
             </div>
 
             <div className="mt-5 space-y-3">
@@ -1364,7 +1582,7 @@ function MeetingRoomContent({
               <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
               <p className="mt-1 text-sm text-[#5f6368]">
                 LiveKit tracks who is actually connected. Use the toolbar for People, Chat, hand
-                raise, and quick reactions without leaving the grid.
+                raise, quick reactions, and presenter focus without leaving the call.
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -1404,11 +1622,19 @@ function MeetingRoomContent({
                     {raisedHandParticipants.length}
                   </p>
                 </div>
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Presenting now
+                  </p>
+                  <p className="mt-1 text-2xl font-medium text-[#202124]">
+                    {screenShareTracks.length}
+                  </p>
+                </div>
               </div>
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
                 Open People to inspect the roster, use Chat to message the room, or raise your
-                hand and send reactions directly from the floating controls.
+                hand, share your screen, and send reactions directly from the floating controls.
               </div>
             </div>
 
@@ -1441,8 +1667,8 @@ function MeetingRoomContent({
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
                 Use the floating toolbar to mute, turn your camera on or off, raise your hand, send
-                reactions, open People or Chat, and leave the call without losing the meeting
-                context.
+                reactions, start presenting, pin a focused stage, open People or Chat, and leave
+                the call without losing the meeting context.
               </div>
             </div>
           </>
