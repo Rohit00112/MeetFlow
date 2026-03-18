@@ -66,6 +66,7 @@ export async function createMeetingJoinToken({
     canPublish: true,
     canPublishData: true,
     canSubscribe: true,
+    canUpdateOwnMetadata: true,
   });
 
   return {

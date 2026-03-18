@@ -47,6 +47,23 @@ interface MeetingChatEntry {
   timestamp: number;
 }
 
+interface MeetingReactionBurst {
+  id: string;
+  emoji: string;
+  senderName: string;
+}
+
+const HAND_RAISED_ATTRIBUTE = "meetflow-hand-raised";
+const HAND_RAISED_AT_ATTRIBUTE = "meetflow-hand-raised-at";
+const REACTION_TOPIC = "meetflow:reaction";
+const REACTION_OPTIONS = [
+  { emoji: "👍", label: "Thumbs up" },
+  { emoji: "👏", label: "Clap" },
+  { emoji: "🎉", label: "Celebrate" },
+  { emoji: "❤️", label: "Heart" },
+  { emoji: "😂", label: "Laugh" },
+] as const;
+
 function formatConnectionState(connectionState: ConnectionState) {
   switch (connectionState) {
     case ConnectionState.Connected:
@@ -102,11 +119,36 @@ function formatParticipantLabel(participant: Participant, viewerName?: string | 
   return participant.name || participant.identity;
 }
 
+function participantHasRaisedHand(participant: Participant) {
+  return participant.attributes[HAND_RAISED_ATTRIBUTE] === "true";
+}
+
+function getRaisedHandTimestamp(participant: Participant) {
+  const rawTimestamp = Number(participant.attributes[HAND_RAISED_AT_ATTRIBUTE] || "0");
+
+  if (!Number.isFinite(rawTimestamp) || rawTimestamp <= 0) {
+    return Number.MAX_SAFE_INTEGER;
+  }
+
+  return rawTimestamp;
+}
+
 function sortGridTracks(
   tracks: TrackReferenceOrPlaceholder[],
   viewerName?: string | null,
 ) {
   return [...tracks].sort((left, right) => {
+    const leftRaisedHand = participantHasRaisedHand(left.participant);
+    const rightRaisedHand = participantHasRaisedHand(right.participant);
+
+    if (leftRaisedHand !== rightRaisedHand) {
+      return leftRaisedHand ? -1 : 1;
+    }
+
+    if (leftRaisedHand && rightRaisedHand) {
+      return getRaisedHandTimestamp(left.participant) - getRaisedHandTimestamp(right.participant);
+    }
+
     if (left.participant.isLocal !== right.participant.isLocal) {
       return left.participant.isLocal ? 1 : -1;
     }
@@ -129,6 +171,17 @@ function sortLiveParticipants(participants: Participant[], viewerName?: string |
   return [...participants].sort((left, right) => {
     if (left.isLocal !== right.isLocal) {
       return left.isLocal ? -1 : 1;
+    }
+
+    const leftRaisedHand = participantHasRaisedHand(left);
+    const rightRaisedHand = participantHasRaisedHand(right);
+
+    if (leftRaisedHand !== rightRaisedHand) {
+      return leftRaisedHand ? -1 : 1;
+    }
+
+    if (leftRaisedHand && rightRaisedHand) {
+      return getRaisedHandTimestamp(left) - getRaisedHandTimestamp(right);
     }
 
     if (left.isSpeaking !== right.isSpeaking) {
@@ -201,6 +254,22 @@ function buildMeetingChatEntry(
   };
 }
 
+function createReactionBurst({
+  emoji,
+  senderName,
+}: {
+  emoji: string;
+  senderName: string;
+}): MeetingReactionBurst {
+  return {
+    id:
+      globalThis.crypto?.randomUUID?.() ||
+      `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    emoji,
+    senderName,
+  };
+}
+
 function MeetingParticipantTile({
   trackRef,
   viewerName,
@@ -211,6 +280,7 @@ function MeetingParticipantTile({
   const participant = trackRef.participant;
   const displayName = formatParticipantLabel(participant, viewerName);
   const hasVideo = isTrackReference(trackRef);
+  const isHandRaised = participantHasRaisedHand(participant);
 
   return (
     <article
@@ -221,6 +291,13 @@ function MeetingParticipantTile({
       } bg-[#2a2b2f]`}
     >
       <div className="relative aspect-video">
+        {isHandRaised ? (
+          <div className="absolute right-4 top-4 z-10 inline-flex items-center gap-1.5 rounded-full bg-[#fbbc04] px-3 py-1.5 text-xs font-medium text-[#202124] shadow-[0_10px_24px_rgba(251,188,4,0.28)]">
+            <Icon icon="heroicons:hand-raised" className="h-4 w-4" />
+            <span>Hand raised</span>
+          </div>
+        ) : null}
+
         {hasVideo ? (
           <VideoTrack
             trackRef={trackRef}
@@ -345,7 +422,7 @@ function MeetingPanelToggleButton({
   onClick,
 }: {
   active: boolean;
-  count: number;
+  count?: number;
   icon: string;
   activeText: string;
   inactiveText: string;
@@ -366,13 +443,15 @@ function MeetingPanelToggleButton({
     >
       <Icon icon={icon} className="h-5 w-5" />
       <span>{active ? activeText : inactiveText}</span>
-      <span
-        className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
-          active ? "bg-white/20 text-white" : "bg-white/10 text-white/90"
-        }`}
-      >
-        {count}
-      </span>
+      {typeof count === "number" ? (
+        <span
+          className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
+            active ? "bg-white/20 text-white" : "bg-white/10 text-white/90"
+          }`}
+        >
+          {count}
+        </span>
+      ) : null}
     </button>
   );
 }
@@ -412,6 +491,7 @@ function MeetingLiveParticipantPanelRow({
 }) {
   const displayName = formatParticipantLabel(participant, viewerName);
   const isHost = participantMatchesUserId(participant, hostUserId);
+  const isHandRaised = participantHasRaisedHand(participant);
 
   return (
     <div className="flex items-center gap-3 rounded-[22px] bg-[#f8fafd] px-4 py-3">
@@ -435,6 +515,11 @@ function MeetingLiveParticipantPanelRow({
           {participant.isSpeaking ? (
             <span className="rounded-full bg-[#e6f4ea] px-2.5 py-1 font-medium text-[#137333]">
               Speaking
+            </span>
+          ) : null}
+          {isHandRaised ? (
+            <span className="rounded-full bg-[#fef7e0] px-2.5 py-1 font-medium text-[#8a5800]">
+              Hand raised
             </span>
           ) : null}
         </div>
@@ -639,6 +724,60 @@ function MeetingChatPanel({
   );
 }
 
+function MeetingReactionPicker({
+  disabled,
+  onSend,
+}: {
+  disabled: boolean;
+  onSend: (emoji: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-2 rounded-[24px] border border-white/10 bg-[#2a2b2f]/92 px-4 py-3 shadow-[0_18px_44px_rgba(32,33,36,0.28)] backdrop-blur">
+      {REACTION_OPTIONS.map((reaction) => (
+        <button
+          key={reaction.emoji}
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            onSend(reaction.emoji);
+          }}
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full bg-white/10 text-2xl transition hover:bg-white/18 disabled:cursor-not-allowed disabled:opacity-50"
+          title={reaction.label}
+        >
+          <span aria-hidden>{reaction.emoji}</span>
+          <span className="sr-only">{reaction.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function MeetingReactionBurstStack({
+  reactions,
+}: {
+  reactions: MeetingReactionBurst[];
+}) {
+  if (reactions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="pointer-events-none absolute right-4 top-4 z-20 flex max-w-[220px] flex-col items-end gap-2">
+      {reactions.map((reaction) => (
+        <div
+          key={reaction.id}
+          className="flex items-center gap-2 rounded-full bg-black/55 px-3 py-2 text-white shadow-[0_12px_28px_rgba(0,0,0,0.24)] backdrop-blur"
+        >
+          <span className="text-xl leading-none" aria-hidden>
+            {reaction.emoji}
+          </span>
+          <span className="text-xs font-medium">{reaction.senderName}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function MeetingRoomContent({
   meeting,
   viewerName,
@@ -662,6 +801,9 @@ function MeetingRoomContent({
   const rawCameraTracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }]);
   const cameraTracks = sortGridTracks(rawCameraTracks, viewerName);
   const liveParticipants = sortLiveParticipants(participants, viewerName);
+  const raisedHandParticipants = liveParticipants.filter((participant) =>
+    participantHasRaisedHand(participant),
+  );
   const remoteParticipants = participants.filter((participant) => !participant.isLocal);
   const offlineInvitees = meeting.attendees.filter(
     (attendee) =>
@@ -670,6 +812,8 @@ function MeetingRoomContent({
   const connectionStatus = formatConnectionState(connectionState);
   const liveTileCount = Math.max(cameraTracks.length, 1);
   const controlsReady = connectionState === ConnectionState.Connected;
+  const isHandRaised = participantHasRaisedHand(localParticipant);
+  const localParticipantName = formatParticipantLabel(localParticipant, viewerName);
   const [pendingControl, setPendingControl] = useState<"microphone" | "camera" | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
   const [activeSidebar, setActiveSidebar] = useState<MeetingSidebarPanel | null>(null);
@@ -678,6 +822,10 @@ function MeetingRoomContent({
   const [isSendingChat, setIsSendingChat] = useState(false);
   const [chatMessages, setChatMessages] = useState<MeetingChatEntry[]>([]);
   const [unreadChatCount, setUnreadChatCount] = useState(0);
+  const [isUpdatingHandRaise, setIsUpdatingHandRaise] = useState(false);
+  const [isReactionPickerOpen, setIsReactionPickerOpen] = useState(false);
+  const [reactionBursts, setReactionBursts] = useState<MeetingReactionBurst[]>([]);
+  const reactionTimeoutsRef = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     const handleChatMessage = (
@@ -717,6 +865,88 @@ function MeetingRoomContent({
       setUnreadChatCount(0);
     }
   }, [activeSidebar]);
+
+  useEffect(() => {
+    const reactionTimeouts = reactionTimeoutsRef.current;
+
+    return () => {
+      reactionTimeouts.forEach((timeoutId) => {
+        clearTimeout(timeoutId);
+      });
+      reactionTimeouts.clear();
+    };
+  }, []);
+
+  const addReactionBurst = (reaction: MeetingReactionBurst) => {
+    setReactionBursts((currentReactions) => {
+      if (currentReactions.some((currentReaction) => currentReaction.id === reaction.id)) {
+        return currentReactions;
+      }
+
+      return [...currentReactions, reaction];
+    });
+
+    const existingTimeout = reactionTimeoutsRef.current.get(reaction.id);
+
+    if (existingTimeout) {
+      clearTimeout(existingTimeout);
+    }
+
+    const timeoutId = setTimeout(() => {
+      setReactionBursts((currentReactions) =>
+        currentReactions.filter((currentReaction) => currentReaction.id !== reaction.id),
+      );
+      reactionTimeoutsRef.current.delete(reaction.id);
+    }, 4500);
+
+    reactionTimeoutsRef.current.set(reaction.id, timeoutId);
+  };
+
+  useEffect(() => {
+    const handleReactionEvent = (
+      payload: Uint8Array,
+      participant?: Participant,
+      _kind?: unknown,
+      topic?: string,
+    ) => {
+      if (topic !== REACTION_TOPIC) {
+        return;
+      }
+
+      try {
+        const parsedPayload = JSON.parse(new TextDecoder().decode(payload)) as Partial<MeetingReactionBurst>;
+
+        if (
+          typeof parsedPayload.id !== "string" ||
+          typeof parsedPayload.emoji !== "string" ||
+          parsedPayload.emoji.length === 0
+        ) {
+          return;
+        }
+
+        const senderName =
+          typeof parsedPayload.senderName === "string" && parsedPayload.senderName.length > 0
+            ? parsedPayload.senderName
+            : participant
+              ? formatParticipantLabel(participant, viewerName)
+              : "Someone";
+
+        addReactionBurst({
+          id: parsedPayload.id,
+          emoji: parsedPayload.emoji,
+          senderName,
+        });
+      } catch {
+        // Ignore malformed reaction payloads from the data channel.
+      }
+    };
+
+    room.on(RoomEvent.DataReceived, handleReactionEvent);
+
+    return () => {
+      room.off(RoomEvent.DataReceived, handleReactionEvent);
+    };
+  }, [room, viewerName]);
 
   const leaveRoom = async () => {
     try {
@@ -759,6 +989,48 @@ function MeetingRoomContent({
       setControlError("We couldn't update your camera state.");
     } finally {
       setPendingControl(null);
+    }
+  };
+
+  const toggleHandRaise = async () => {
+    if (!controlsReady || isUpdatingHandRaise) {
+      return;
+    }
+
+    try {
+      setIsUpdatingHandRaise(true);
+      setControlError(null);
+      await localParticipant.setAttributes({
+        [HAND_RAISED_ATTRIBUTE]: isHandRaised ? "false" : "true",
+        [HAND_RAISED_AT_ATTRIBUTE]: isHandRaised ? "0" : String(Date.now()),
+      });
+    } catch {
+      setControlError("We couldn't update your raised hand state.");
+    } finally {
+      setIsUpdatingHandRaise(false);
+    }
+  };
+
+  const sendReaction = async (emoji: string) => {
+    if (!controlsReady) {
+      return;
+    }
+
+    const reaction = createReactionBurst({
+      emoji,
+      senderName: localParticipantName,
+    });
+
+    try {
+      setControlError(null);
+      addReactionBurst(reaction);
+      setIsReactionPickerOpen(false);
+      await localParticipant.publishData(new TextEncoder().encode(JSON.stringify(reaction)), {
+        reliable: true,
+        topic: REACTION_TOPIC,
+      });
+    } catch {
+      setControlError("We couldn't send your reaction.");
     }
   };
 
@@ -830,8 +1102,16 @@ function MeetingRoomContent({
                 <span className="rounded-full bg-white/10 px-3 py-1 backdrop-blur">
                   {isCameraEnabled ? "Camera on" : "Camera off"}
                 </span>
+                {raisedHandParticipants.length > 0 ? (
+                  <span className="rounded-full bg-[#fbbc04]/90 px-3 py-1 text-[#202124] backdrop-blur">
+                    {raisedHandParticipants.length} hand
+                    {raisedHandParticipants.length === 1 ? "" : "s"} raised
+                  </span>
+                ) : null}
               </div>
             </div>
+
+            <MeetingReactionBurstStack reactions={reactionBursts} />
 
             <div className={`grid gap-4 ${getGridColumnsClass(liveTileCount)}`}>
               {cameraTracks.length > 0 ? (
@@ -876,6 +1156,15 @@ function MeetingRoomContent({
             </div>
           ) : null}
 
+          {isReactionPickerOpen ? (
+            <MeetingReactionPicker
+              disabled={!controlsReady}
+              onSend={(emoji) => {
+                void sendReaction(emoji);
+              }}
+            />
+          ) : null}
+
           <div className="inline-flex flex-wrap items-center justify-center gap-3 rounded-full bg-[#202124] px-4 py-3 shadow-[0_18px_44px_rgba(32,33,36,0.28)]">
             <MeetingMediaControlButton
               active={isMicrophoneEnabled}
@@ -902,6 +1191,28 @@ function MeetingRoomContent({
               }}
             />
             <MeetingPanelToggleButton
+              active={isHandRaised}
+              icon="heroicons:hand-raised"
+              activeText="Lower hand"
+              inactiveText="Raise hand"
+              activeTitle="Lower your hand"
+              inactiveTitle="Raise your hand"
+              onClick={() => {
+                void toggleHandRaise();
+              }}
+            />
+            <MeetingPanelToggleButton
+              active={isReactionPickerOpen}
+              icon="heroicons:face-smile"
+              activeText="Hide reactions"
+              inactiveText="Reactions"
+              activeTitle="Hide reaction picker"
+              inactiveTitle="Open reaction picker"
+              onClick={() => {
+                setIsReactionPickerOpen((currentValue) => !currentValue);
+              }}
+            />
+            <MeetingPanelToggleButton
               active={activeSidebar === "people"}
               count={liveParticipants.length}
               icon="heroicons:users"
@@ -910,6 +1221,7 @@ function MeetingRoomContent({
               activeTitle="Hide people panel"
               inactiveTitle="Show people panel"
               onClick={() => {
+                setIsReactionPickerOpen(false);
                 setActiveSidebar((currentValue) =>
                   currentValue === "people" ? null : "people",
                 );
@@ -924,6 +1236,7 @@ function MeetingRoomContent({
               activeTitle="Hide chat panel"
               inactiveTitle="Show chat panel"
               onClick={() => {
+                setIsReactionPickerOpen(false);
                 setActiveSidebar((currentValue) =>
                   currentValue === "chat" ? null : "chat",
                 );
@@ -982,6 +1295,14 @@ function MeetingRoomContent({
                   Still invited
                 </p>
                 <p className="mt-1 text-2xl font-medium text-[#202124]">{offlineInvitees.length}</p>
+              </div>
+              <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                  Hands raised
+                </p>
+                <p className="mt-1 text-2xl font-medium text-[#202124]">
+                  {raisedHandParticipants.length}
+                </p>
               </div>
             </div>
 
@@ -1042,8 +1363,8 @@ function MeetingRoomContent({
             <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
               <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
               <p className="mt-1 text-sm text-[#5f6368]">
-                LiveKit tracks who is actually connected. Use the People or Chat toggles for the
-                active side panels.
+                LiveKit tracks who is actually connected. Use the toolbar for People, Chat, hand
+                raise, and quick reactions without leaving the grid.
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -1075,11 +1396,19 @@ function MeetingRoomContent({
                     {remoteParticipants.length}
                   </p>
                 </div>
+                <div className="rounded-[20px] bg-[#f8fafd] px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-[0.14em] text-[#5f6368]">
+                    Hands raised
+                  </p>
+                  <p className="mt-1 text-2xl font-medium text-[#202124]">
+                    {raisedHandParticipants.length}
+                  </p>
+                </div>
               </div>
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                Open People to inspect the roster, or Chat to message everyone in the room without
-                leaving the meeting grid.
+                Open People to inspect the roster, use Chat to message the room, or raise your
+                hand and send reactions directly from the floating controls.
               </div>
             </div>
 
@@ -1111,8 +1440,9 @@ function MeetingRoomContent({
               ) : null}
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                Use the floating toolbar to mute, turn your camera on or off, open People or Chat,
-                and leave the call without losing the meeting context.
+                Use the floating toolbar to mute, turn your camera on or off, raise your hand, send
+                reactions, open People or Chat, and leave the call without losing the meeting
+                context.
               </div>
             </div>
           </>
