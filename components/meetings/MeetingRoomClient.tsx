@@ -1,6 +1,6 @@
 "use client";
 
-import { startTransition, useEffect, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -17,8 +17,10 @@ import {
 } from "@livekit/components-react";
 import { Icon } from "@iconify/react/dist/iconify.js";
 import {
+  type ChatMessage as LiveKitChatMessage,
   ConnectionState,
   type Participant,
+  RoomEvent,
   Track,
   type AudioCaptureOptions,
   type VideoCaptureOptions,
@@ -33,6 +35,16 @@ interface MeetingRoomClientProps {
   meetingCode: string | null;
   meeting: MeetingDetail | null;
   viewerName?: string | null;
+}
+
+type MeetingSidebarPanel = "people" | "chat";
+
+interface MeetingChatEntry {
+  id: string;
+  message: string;
+  senderName: string;
+  isLocal: boolean;
+  timestamp: number;
 }
 
 function formatConnectionState(connectionState: ConnectionState) {
@@ -164,6 +176,29 @@ function getAttendeeStatusPresentation(status: MeetingAttendeeSummary["status"])
         className: "bg-[#e8f0fe] text-[#174ea6]",
       };
   }
+}
+
+function formatChatTimestamp(timestamp: number) {
+  return new Intl.DateTimeFormat("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(timestamp));
+}
+
+function buildMeetingChatEntry(
+  message: LiveKitChatMessage,
+  participant?: Participant,
+  viewerName?: string | null,
+): MeetingChatEntry {
+  const senderName = participant ? formatParticipantLabel(participant, viewerName) : "Someone";
+
+  return {
+    id: message.id,
+    message: message.message,
+    senderName,
+    isLocal: participant?.isLocal ?? false,
+    timestamp: message.editTimestamp ?? message.timestamp,
+  };
 }
 
 function MeetingParticipantTile({
@@ -302,10 +337,20 @@ function MeetingMediaControlButton({
 function MeetingPanelToggleButton({
   active,
   count,
+  icon,
+  activeText,
+  inactiveText,
+  activeTitle,
+  inactiveTitle,
   onClick,
 }: {
   active: boolean;
   count: number;
+  icon: string;
+  activeText: string;
+  inactiveText: string;
+  activeTitle: string;
+  inactiveTitle: string;
   onClick: () => void;
 }) {
   return (
@@ -317,10 +362,10 @@ function MeetingPanelToggleButton({
           ? "bg-[#1a73e8] text-white hover:bg-[#1765cc]"
           : "bg-[#3c4043] text-white hover:bg-[#4a4d52]"
       }`}
-      title={active ? "Hide people panel" : "Show people panel"}
+      title={active ? activeTitle : inactiveTitle}
     >
-      <Icon icon="heroicons:users" className="h-5 w-5" />
-      <span>{active ? "Hide people" : "People"}</span>
+      <Icon icon={icon} className="h-5 w-5" />
+      <span>{active ? activeText : inactiveText}</span>
       <span
         className={`inline-flex min-w-7 items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${
           active ? "bg-white/20 text-white" : "bg-white/10 text-white/90"
@@ -457,6 +502,143 @@ function MeetingInvitePanelRow({
   );
 }
 
+function MeetingChatPanel({
+  controlsReady,
+  messages,
+  draft,
+  isSending,
+  error,
+  onClose,
+  onDraftChange,
+  onSend,
+}: {
+  controlsReady: boolean;
+  messages: MeetingChatEntry[];
+  draft: string;
+  isSending: boolean;
+  error: string | null;
+  onClose: () => void;
+  onDraftChange: (value: string) => void;
+  onSend: () => void;
+}) {
+  const messageContainerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!messageContainerRef.current) {
+      return;
+    }
+
+    messageContainerRef.current.scrollTop = messageContainerRef.current.scrollHeight;
+  }, [messages]);
+
+  return (
+    <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-medium text-[#202124]">In-call chat</h3>
+          <p className="mt-1 text-sm text-[#5f6368]">
+            Messages are visible to everyone currently in the room.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f3f4] text-[#5f6368] transition hover:bg-[#e8eaed]"
+          title="Close chat panel"
+        >
+          <Icon icon="heroicons:x-mark" className="h-5 w-5" />
+        </button>
+      </div>
+
+      <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-3 text-sm text-[#5f6368]">
+        {messages.length === 0
+          ? "No chat messages yet. Start the conversation for everyone in the room."
+          : `${messages.length} message${messages.length === 1 ? "" : "s"} in this call`}
+      </div>
+
+      <div
+        ref={messageContainerRef}
+        className="mt-5 flex max-h-[420px] flex-col gap-3 overflow-y-auto pr-1"
+      >
+        {messages.length > 0 ? (
+          messages.map((message) => (
+            <div
+              key={message.id}
+              className={`flex ${message.isLocal ? "justify-end" : "justify-start"}`}
+            >
+              <div className={`max-w-[85%] ${message.isLocal ? "items-end" : "items-start"}`}>
+                <div className="mb-1 flex items-center gap-2 text-xs text-[#5f6368]">
+                  <span className="font-medium text-[#3c4043]">{message.senderName}</span>
+                  <span>{formatChatTimestamp(message.timestamp)}</span>
+                </div>
+                <div
+                  className={`rounded-[20px] px-4 py-3 text-sm leading-6 ${
+                    message.isLocal
+                      ? "bg-[#1a73e8] text-white"
+                      : "border border-[#eef0f1] bg-[#f8fafd] text-[#202124]"
+                  }`}
+                >
+                  {message.message}
+                </div>
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="flex min-h-[220px] flex-col items-center justify-center rounded-[24px] border border-dashed border-[#dadce0] px-6 text-center text-[#5f6368]">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-[#e8f0fe] text-[#174ea6]">
+              <Icon icon="heroicons:chat-bubble-left-right" className="h-7 w-7" />
+            </div>
+            <p className="mt-4 text-sm font-medium text-[#3c4043]">Chat is ready</p>
+            <p className="mt-2 text-sm leading-6">
+              Send a message to everyone in the call without leaving the meeting grid.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {error ? (
+        <div className="mt-4 rounded-[20px] border border-[#f6c7c3] bg-[#fef7f6] px-4 py-3 text-sm leading-6 text-[#b3261e]">
+          {error}
+        </div>
+      ) : null}
+
+      <form
+        className="mt-5 flex items-end gap-3"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onSend();
+        }}
+      >
+        <label className="sr-only" htmlFor="meeting-chat-input">
+          Send a message
+        </label>
+        <textarea
+          id="meeting-chat-input"
+          rows={3}
+          value={draft}
+          onChange={(event) => {
+            onDraftChange(event.target.value);
+          }}
+          placeholder={controlsReady ? "Send a message to everyone" : "Connect to chat"}
+          disabled={!controlsReady || isSending}
+          className="min-h-[108px] flex-1 resize-none rounded-[22px] border border-[#dadce0] px-4 py-3 text-sm text-[#202124] outline-none transition placeholder:text-[#80868b] focus:border-[#1a73e8] focus:ring-2 focus:ring-[#d2e3fc] disabled:cursor-not-allowed disabled:bg-[#f8fafd]"
+        />
+        <button
+          type="submit"
+          disabled={!controlsReady || isSending || draft.trim().length === 0}
+          className="inline-flex h-12 items-center justify-center gap-2 rounded-full bg-[#1a73e8] px-5 text-sm font-medium text-white transition hover:bg-[#1765cc] disabled:cursor-not-allowed disabled:bg-[#9aa0a6]"
+        >
+          <Icon
+            icon={isSending ? "heroicons:arrow-path" : "heroicons:paper-airplane"}
+            className={`h-5 w-5 ${isSending ? "animate-spin" : ""}`}
+          />
+          <span>{isSending ? "Sending" : "Send"}</span>
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function MeetingRoomContent({
   meeting,
   viewerName,
@@ -490,7 +672,51 @@ function MeetingRoomContent({
   const controlsReady = connectionState === ConnectionState.Connected;
   const [pendingControl, setPendingControl] = useState<"microphone" | "camera" | null>(null);
   const [controlError, setControlError] = useState<string | null>(null);
-  const [isParticipantPanelOpen, setIsParticipantPanelOpen] = useState(false);
+  const [activeSidebar, setActiveSidebar] = useState<MeetingSidebarPanel | null>(null);
+  const [chatDraft, setChatDraft] = useState("");
+  const [chatError, setChatError] = useState<string | null>(null);
+  const [isSendingChat, setIsSendingChat] = useState(false);
+  const [chatMessages, setChatMessages] = useState<MeetingChatEntry[]>([]);
+  const [unreadChatCount, setUnreadChatCount] = useState(0);
+
+  useEffect(() => {
+    const handleChatMessage = (
+      message: LiveKitChatMessage,
+      participant?: Participant,
+    ) => {
+      const entry = buildMeetingChatEntry(message, participant, viewerName);
+
+      setChatMessages((currentMessages) => {
+        const existingMessageIndex = currentMessages.findIndex(
+          (currentMessage) => currentMessage.id === entry.id,
+        );
+
+        if (existingMessageIndex >= 0) {
+          return currentMessages.map((currentMessage) =>
+            currentMessage.id === entry.id ? entry : currentMessage,
+          );
+        }
+
+        return [...currentMessages, entry];
+      });
+
+      if (!entry.isLocal && activeSidebar !== "chat") {
+        setUnreadChatCount((currentCount) => currentCount + 1);
+      }
+    };
+
+    room.on(RoomEvent.ChatMessage, handleChatMessage);
+
+    return () => {
+      room.off(RoomEvent.ChatMessage, handleChatMessage);
+    };
+  }, [activeSidebar, room, viewerName]);
+
+  useEffect(() => {
+    if (activeSidebar === "chat") {
+      setUnreadChatCount(0);
+    }
+  }, [activeSidebar]);
 
   const leaveRoom = async () => {
     try {
@@ -533,6 +759,26 @@ function MeetingRoomContent({
       setControlError("We couldn't update your camera state.");
     } finally {
       setPendingControl(null);
+    }
+  };
+
+  const sendChatMessage = async () => {
+    const message = chatDraft.trim();
+
+    if (!controlsReady || isSendingChat || message.length === 0) {
+      return;
+    }
+
+    try {
+      setIsSendingChat(true);
+      setChatError(null);
+      await localParticipant.sendChatMessage(message);
+      setChatDraft("");
+      setActiveSidebar("chat");
+    } catch {
+      setChatError("We couldn't send your message.");
+    } finally {
+      setIsSendingChat(false);
     }
   };
 
@@ -656,10 +902,31 @@ function MeetingRoomContent({
               }}
             />
             <MeetingPanelToggleButton
-              active={isParticipantPanelOpen}
+              active={activeSidebar === "people"}
               count={liveParticipants.length}
+              icon="heroicons:users"
+              activeText="Hide people"
+              inactiveText="People"
+              activeTitle="Hide people panel"
+              inactiveTitle="Show people panel"
               onClick={() => {
-                setIsParticipantPanelOpen((currentValue) => !currentValue);
+                setActiveSidebar((currentValue) =>
+                  currentValue === "people" ? null : "people",
+                );
+              }}
+            />
+            <MeetingPanelToggleButton
+              active={activeSidebar === "chat"}
+              count={activeSidebar === "chat" ? chatMessages.length : unreadChatCount}
+              icon="heroicons:chat-bubble-left-right"
+              activeText="Hide chat"
+              inactiveText="Chat"
+              activeTitle="Hide chat panel"
+              inactiveTitle="Show chat panel"
+              onClick={() => {
+                setActiveSidebar((currentValue) =>
+                  currentValue === "chat" ? null : "chat",
+                );
               }}
             />
             <MeetingMediaControlButton
@@ -682,7 +949,7 @@ function MeetingRoomContent({
           mediaFailure={mediaFailure}
         />
 
-        {isParticipantPanelOpen ? (
+        {activeSidebar === "people" ? (
           <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
             <div className="flex items-start justify-between gap-4">
               <div>
@@ -694,7 +961,7 @@ function MeetingRoomContent({
               <button
                 type="button"
                 onClick={() => {
-                  setIsParticipantPanelOpen(false);
+                  setActiveSidebar(null);
                 }}
                 className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-[#f1f3f4] text-[#5f6368] transition hover:bg-[#e8eaed]"
                 title="Close people panel"
@@ -755,13 +1022,28 @@ function MeetingRoomContent({
               )}
             </div>
           </div>
+        ) : activeSidebar === "chat" ? (
+          <MeetingChatPanel
+            controlsReady={controlsReady}
+            messages={chatMessages}
+            draft={chatDraft}
+            isSending={isSendingChat}
+            error={chatError}
+            onClose={() => {
+              setActiveSidebar(null);
+            }}
+            onDraftChange={setChatDraft}
+            onSend={() => {
+              void sendChatMessage();
+            }}
+          />
         ) : (
           <>
             <div className="rounded-[26px] border border-[#eef0f1] bg-white p-5 shadow-[0_14px_36px_rgba(32,33,36,0.1)]">
               <h3 className="text-lg font-medium text-[#202124]">Room snapshot</h3>
               <p className="mt-1 text-sm text-[#5f6368]">
-                LiveKit tracks who is actually connected. Use the People toggle for the detailed
-                roster.
+                LiveKit tracks who is actually connected. Use the People or Chat toggles for the
+                active side panels.
               </p>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-1">
@@ -796,8 +1078,8 @@ function MeetingRoomContent({
               </div>
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                Open People from the toolbar to see live participants, host badges, mic and camera
-                state, and the remaining invite list.
+                Open People to inspect the roster, or Chat to message everyone in the room without
+                leaving the meeting grid.
               </div>
             </div>
 
@@ -829,8 +1111,8 @@ function MeetingRoomContent({
               ) : null}
 
               <div className="mt-5 rounded-[22px] bg-[#f8fafd] px-4 py-4 text-sm leading-6 text-[#5f6368]">
-                Use the floating toolbar to mute, turn your camera on or off, open People, and
-                leave the call without losing the meeting context.
+                Use the floating toolbar to mute, turn your camera on or off, open People or Chat,
+                and leave the call without losing the meeting context.
               </div>
             </div>
           </>
